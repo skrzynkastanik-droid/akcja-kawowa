@@ -1,32 +1,60 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="pl">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="style.css">
     <title>Akcja kawowa</title>
 </head>
-
 <body>
-    <h1>Kawa nie kwach</h1>
- <div id="kontener">
-    <div>
-        <h3>Kawosze</h3>
-        <ul id="lista"></ul>
-    </div>
-    <div>
-        <h3>Historia</h3>
-        <div id="historia"></div>
-    </div>
-</div>
-    <p id="runda">Runda: 1</p>
-    <button id="losuj">Losuj</button>
-    <button id="resetuj">Resetuj</button>
-    <button id="nowa-gra">Nowa gra</button>
-    <div id="pasek-container">
-        <div id="pasek"></div>
-    </div>
-    <p id="wynik"></p>
+
+    <header>
+        <h1>☕ Kawa prawem, nie towarem.</h1>
+        <p>Kto kupuje kawę dla zespołu?</p>
+    </header>
+
+    <main>
+
+        <div id="gora">
+
+            <div class="karta" id="karta-wynik">
+                <p>Ostatnio wylosowana osoba:</p>
+                <div id="avatar"></div>
+                <p id="wynik"></p>
+            </div>
+
+            <div class="karta" id="karta-runda">
+                <p>Postęp rundy</p>
+                <p id="runda">1 / ?</p>
+                <div id="pasek-container">
+                    <div id="pasek"></div>
+                </div>
+            </div>
+
+        </div>
+
+        <div id="przyciski">
+            <button id="losuj">Losuj</button>
+            <button id="resetuj">Reset Rundy</button>
+            <button id="nowa-gra">Nowa Gra</button>
+        </div>
+
+        <div id="dol">
+
+            <div class="karta" id="karta-lista">
+                <h3>Kawosze</h3>
+                <ul id="lista"></ul>
+            </div>
+
+            <div class="karta" id="karta-historia">
+                <h3>Historia losowań</h3>
+                <div id="historia"></div>
+            </div>
+
+        </div>
+
+    </main>
+
     <script src="app.js"></script>
 </body>
-
 </html>
