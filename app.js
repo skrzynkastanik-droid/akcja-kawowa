@@ -1,5 +1,4 @@
 let historia = []
-
 let numerRundy = 1
 
 const kawosze = [
@@ -36,6 +35,14 @@ function rysujListe() {
         })
 
         li.appendChild(span)
+
+        if (osoba.wylosowany && !osoba.urlop) {
+            const chip = document.createElement("span")
+            chip.textContent = "✓ wylosowany"
+            chip.className = "chip"
+            li.appendChild(chip)
+        }
+
         li.appendChild(przyciskUrlop)
         lista.appendChild(li)
     })
@@ -44,13 +51,10 @@ function rysujListe() {
 function rysujHistorie() {
     const kontener = document.getElementById("historia")
     kontener.innerHTML = ""
-
     const od = numerRundy - 2
-
     const przefiltrowana = historia.filter(function (wpis) {
         return wpis.runda >= od
     })
-
     przefiltrowana.forEach(function (wpis) {
         const div = document.createElement("div")
         div.textContent = "R" + wpis.runda + " | " + wpis.imie + " | " + wpis.data
@@ -66,35 +70,28 @@ przyciskLosuj.addEventListener("click", function () {
     const dostepni = kawosze.filter(function (osoba) {
         return osoba.wylosowany === false && osoba.urlop === false
     })
-
     if (dostepni.length === 0) {
         document.getElementById("wynik").textContent = "Wszyscy wylosowani!"
         localStorage.setItem("wynik", "Wszyscy wylosowani!")
         return
     }
-
     przyciskLosuj.disabled = true
     przyciskResetuj.disabled = true
-
     const pasek = document.getElementById("pasek")
     pasek.style.width = "0%"
     setTimeout(function () {
         pasek.style.width = "100%"
     }, 50)
-
     const miganie = setInterval(function () {
         const losowyIndeks = Math.floor(Math.random() * dostepni.length)
         document.getElementById("wynik").textContent = dostepni[losowyIndeks].imie
     }, 150)
-
     setTimeout(function () {
         clearInterval(miganie)
-
         const indeks = Math.floor(Math.random() * dostepni.length)
         const wylosowana = dostepni[indeks]
         document.getElementById("wynik").textContent = wylosowana.imie
         wylosowana.wylosowany = true
-
         historia.push({
             imie: wylosowana.imie,
             data: new Date().toLocaleString("pl-PL"),
@@ -102,11 +99,9 @@ przyciskLosuj.addEventListener("click", function () {
         })
         localStorage.setItem("historia", JSON.stringify(historia))
         rysujHistorie()
-
         localStorage.setItem("kawosze", JSON.stringify(kawosze))
         localStorage.setItem("wynik", wylosowana.imie)
         rysujListe()
-
         pasek.style.width = "0%"
         przyciskLosuj.disabled = false
         przyciskResetuj.disabled = false
@@ -150,6 +145,8 @@ if (zapisane) {
         kawosze[indeks].wylosowany = osoba.wylosowany
         kawosze[indeks].urlop = osoba.urlop
     })
+    rysujListe()
+} else {
     rysujListe()
 }
 
