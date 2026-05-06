@@ -124,7 +124,7 @@ przyciskResetuj.addEventListener("click", function () {
     localStorage.setItem("wynik", "")
     rysujListe()
     numerRundy = numerRundy + 1
-    document.getElementById("runda").textContent = numerRundy + " / " + losowani.length
+    aktualizujRunde()
     localStorage.setItem("numerRundy", numerRundy)
 })
 
@@ -136,7 +136,7 @@ przyciskNowagra.addEventListener("click", function () {
     historia = []
     numerRundy = 1
     document.getElementById("wynik").textContent = ""
-    document.getElementById("runda").textContent = "Runda: 1"
+    aktualizujRunde()
     localStorage.setItem("kawosze", JSON.stringify(kawosze))
     localStorage.setItem("wynik", "")
     localStorage.setItem("historia", JSON.stringify(historia))
@@ -165,7 +165,7 @@ if (zapisanyWynik) {
 const zapisanaRunda = localStorage.getItem("numerRundy")
 if (zapisanaRunda) {
     numerRundy = parseInt(zapisanaRunda)
-    document.getElementById("runda").textContent = "Runda: " + numerRundy
+    aktualizujRunde()
 }
 
 const zapisanaHistoria = localStorage.getItem("historia")
