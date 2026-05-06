@@ -62,6 +62,13 @@ function rysujHistorie() {
     })
 }
 
+function aktualizujRunde() {
+    const losowani = kawosze.filter(function (osoba) {
+        return osoba.urlop === false
+    })
+    document.getElementById("runda").textContent = numerRundy + " / " + losowani.length
+}
+
 const przyciskLosuj = document.getElementById("losuj")
 const przyciskResetuj = document.getElementById("resetuj")
 const przyciskNowagra = document.getElementById("nowa-gra")
@@ -117,7 +124,7 @@ przyciskResetuj.addEventListener("click", function () {
     localStorage.setItem("wynik", "")
     rysujListe()
     numerRundy = numerRundy + 1
-    document.getElementById("runda").textContent = "Runda: " + numerRundy
+    document.getElementById("runda").textContent = numerRundy + " / " + losowani.length
     localStorage.setItem("numerRundy", numerRundy)
 })
 
