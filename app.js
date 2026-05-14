@@ -1,0 +1,650 @@
+/* ============================================================
+   AKCJA KAWOWA — app.js
+   Cała logika strony: ładowanie danych, zakładki, losowanie.
+   Vanilla JS — bez frameworków. Komentarze po polsku.
+   ============================================================ */
+
+/* ---------- 1. STAN APLIKACJI ----------
+   Cała aplikacja trzyma swój stan w jednym obiekcie `state`.
+   Przy każdej zmianie wołamy `render()` żeby przerysować widok. */
+const state = {
+  data: null,           // dane z data.json
+  tab: 'losowanie',     // aktualna zakładka
+  whoAmI: 'marek',      // kto teraz korzysta — wybierane w nagłówku
+  draw: {
+    stage: 'idle',      // 'idle' | 'reel' | 'wynik'
+    winner: null,       // wylosowana osoba (id)
+    gifUrl: null,       // gif z Giphy
+  },
+};
+
+/* ---------- 2. ŁADOWANIE DANYCH ----------
+   Ładujemy data.json. fetch() to wbudowana funkcja przeglądarki
+   do pobierania plików. await czeka aż się załaduje. */
+async function loadData() {
+  const res = await fetch('data.json');
+  state.data = await res.json();
+}
+
+/* ---------- 3. POMOCNICZE FUNKCJE ----------
+   Krótkie funkcje używane w wielu miejscach. */
+const $ = (sel) => document.querySelector(sel);
+const byId = (list, id) => list.find(x => x.id === id);
+const memberById = (id) => byId(state.data.team, id);
+const initials = (name) => name.slice(0, 2).toUpperCase();
+
+/* zwraca listę osób które stawiały w bieżącej rundzie */
+function paidThisRound() {
+  const round = state.data.rounds.find(r => r.number === state.data.currentRound);
+  if (!round) return [];
+  return round.draws.map(d => d.memberId);
+}
+
+/* zwraca listę osób w grze (nie odpadli, są w biurze) */
+function inGame() {
+  const paid = paidThisRound();
+  return state.data.team.filter(p => p.active && !p.todayOff && !paid.includes(p.id));
+}
+
+function out() {
+  const paid = paidThisRound();
+  return state.data.team.filter(p => paid.includes(p.id));
+}
+
+function ho() {
+  return state.data.team.filter(p => p.active && p.todayOff);
+}
+
+/* średnia ocena dla zakupu */
+function avgScore(purchaseId) {
+  const rs = state.data.ratings.filter(r => r.purchaseId === purchaseId);
+  if (rs.length === 0) return null;
+  return rs.reduce((s, r) => s + r.score, 0) / rs.length;
+}
+
+/* zwraca rankingi zakupów posortowane po ocenie */
+function rankedPurchases() {
+  return state.data.purchases
+    .map(p => ({ ...p, score: avgScore(p.id), votes: state.data.ratings.filter(r => r.purchaseId === p.id).length }))
+    .filter(p => p.score !== null)
+    .sort((a, b) => b.score - a.score);
+}
+
+/* znajduje zakup po drawId */
+function purchaseForDraw(drawId) {
+  return state.data.purchases.find(p => p.drawId === drawId);
+}
+
+/* ---------- 4. RENDER GŁÓWNY ----------
+   render() wywoływany jest po każdej zmianie stanu. */
+function render() {
+  $('#app').innerHTML = `
+    ${renderTopbar()}
+    ${renderTabs()}
+    <div id="tab-content" class="fade-in">
+      ${renderTab()}
+    </div>
+  `;
+  attachEvents();
+}
+
+function renderTopbar() {
+  const me = memberById(state.whoAmI);
+  return `
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-logo">☕</div>
+        <div class="brand-text">
+          <h1>Kawa prawem, nie towarem</h1>
+          <div class="subtitle">runda ${state.data.currentRound} · ${inGame().length} z ${state.data.team.filter(p => p.active).length} w grze</div>
+        </div>
+      </div>
+      <div class="who-am-i">
+        <span class="label">kawosz:</span>
+        <select id="who-select">
+          ${state.data.team.map(p => `
+            <option value="${p.id}" ${p.id === state.whoAmI ? 'selected' : ''}>${p.name}</option>
+          `).join('')}
+        </select>
+      </div>
+    </div>
+  `;
+}
+
+function renderTabs() {
+  const tabs = [
+    { id: 'losowanie',  label: 'Losowanie' },
+    { id: 'zespol',     label: 'Zespół' },
+    { id: 'historia',   label: 'Historia' },
+    { id: 'statystyki', label: 'Statystyki' },
+    { id: 'ranking',    label: 'Ranking' },
+  ];
+  return `
+    <div class="tabs">
+      ${tabs.map(t => `
+        <button class="tab ${state.tab === t.id ? 'active' : ''}" data-tab="${t.id}">
+          ${t.label}
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderTab() {
+  switch (state.tab) {
+    case 'losowanie':  return renderLosowanie();
+    case 'zespol':     return renderZespol();
+    case 'historia':   return renderHistoria();
+    case 'statystyki': return renderStatystyki();
+    case 'ranking':    return renderRanking();
+  }
+  return '';
+}
+
+/* ---------- 5. ZAKŁADKA: LOSOWANIE ---------- */
+function renderLosowanie() {
+  if (state.draw.stage === 'reel')  return renderDrawReel();
+  if (state.draw.stage === 'wynik') return renderDrawResult();
+  return renderDrawIdle();
+}
+
+function renderDrawIdle() {
+  const players = inGame();
+  const last = state.data.rounds[0]?.draws[0];
+  const lastMember = last ? memberById(last.memberId) : null;
+  const lastPurchase = last ? purchaseForDraw(last.id) : null;
+  const canDraw = players.length > 0;
+
+  return `
+    <div class="draw-stage">
+      <div class="draw-main">
+        <div class="draw-headline">Koło <em>kawowego</em> losu</div>
+        <button class="btn-draw" id="btn-draw" ${canDraw ? '' : 'disabled'}>
+          LOSUJ
+        </button>
+        <div class="draw-hint">
+          ${canDraw
+            ? '\n'
+            : 'runda zakończona — wszyscy raz stawiali'}
+        </div>
+      </div>
+
+      <div class="round-info">
+        <div class="card">
+          <h3>W grze w tej rundzie <span class="mono">(${players.length})</span></h3>
+          <div class="member-list">
+            ${players.map(p => `
+              <div class="member-row">
+                <div class="avatar">${initials(p.name)}</div>
+                <span class="name">${p.name}</span>
+                <span class="badge badge-game">w grze</span>
+              </div>
+            `).join('') || '<div class="mono" style="padding:8px">brak — runda się skończyła</div>'}
+          </div>
+
+          ${out().length ? `
+            <hr class="divider"/>
+            <h3>Wylosowani w tej rundzie <span class="mono">(${out().length})</span></h3>
+            <div class="member-list">
+              ${out().map(p => `
+                <div class="member-row is-out">
+                  <div class="avatar">${initials(p.name)}</div>
+                  <span class="name">${p.name}</span>
+                  <span class="badge badge-out">wylosowany</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+
+          ${ho().length ? `
+            <hr class="divider"/>
+            <h3>Dziś nieobecni <span class="mono">(${ho().length})</span></h3>
+            <div class="member-list">
+              ${ho().map(p => `
+                <div class="member-row is-ho">
+                  <div class="avatar">${initials(p.name)}</div>
+                  <span class="name">${p.name}</span>
+                  <span class="badge badge-ho">nieobecny</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+
+        ${lastMember && lastPurchase ? `
+          <div class="last-result">
+            <div class="avatar avatar-lg" style="background: var(--coffee); color: var(--paper);">
+              ${initials(lastMember.name)}
+            </div>
+            <div class="info">
+              <div class="mono">
+</div>
+              <div class="who">${lastMember.name} kupiła</div>
+              <div style="font-size:13px; color:var(--ink-2)">
+                ${lastPurchase.brand} · ${lastPurchase.variety} · ${lastPurchase.price} zł
+              </div>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function renderDrawReel() {
+  // reel pokazuje przewijające się imiona
+  const players = inGame();
+  // powtarzamy listę x3 żeby długi pas
+  const long = [...players, ...players, ...players, ...players, ...players];
+  return `
+    <div class="draw-stage" style="grid-template-columns: 1fr">
+      <div class="draw-main">
+        <div class="mono" style="margin-bottom: 8px; color: var(--coffee);">● TRWA LOSOWANIE ●</div>
+        <div class="draw-headline">kto to będzie...?</div>
+
+        <div class="reel">
+          <div class="reel-line"></div>
+          <div class="reel-pointer-top"></div>
+          <div class="reel-pointer-bottom"></div>
+          <div class="reel-track" id="reel-track">
+            ${long.map(p => `<div class="reel-name">${p.name}</div>`).join('')}
+          </div>
+        </div>
+
+        <div class="draw-hint">drum roll... 🥁</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderDrawResult() {
+  const winner = memberById(state.draw.winner);
+  return `
+    <div class="result fade-in" id="result-stage">
+      <div class="mono">★ wynik losowania · runda ${state.data.currentRound} ★</div>
+      <div class="avatar avatar-xl pop" style="background: var(--coffee); color: var(--paper); margin: 16px auto;">
+        ${initials(winner.name)}
+      </div>
+      <div class="result-name">${winner.name}!</div>
+      <div class="result-tagline">kupujesz 1kg kawy ziarnistej</div>
+
+      <div class="result-meta">
+        <span class="chip">📅 do końca tygodnia</span>
+        <span class="chip">📷 zdjęcie torebki obowiązkowe</span>
+      </div>
+
+      <div class="result-gif" id="gif-slot">
+        <span class="mono">ładuję mem...</span>
+      </div>
+
+      <div class="result-actions">
+        <button class="btn btn-primary" id="btn-register">📷 zarejestruj zakup</button>
+        <button class="btn" id="btn-calendar">📅 dodaj do kalendarza</button>
+        <button class="btn btn-ghost" id="btn-back">← powrót</button>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------- 6. ZAKŁADKA: ZESPÓŁ ---------- */
+function renderZespol() {
+  const paid = paidThisRound();
+  return `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
+      <h2>Zespół (${state.data.team.length})</h2>
+      <div style="display:flex; gap:8px;">
+        <button class="btn">+ dodaj osobę</button>
+      </div>
+    </div>
+    <table class="data">
+      <thead>
+        <tr>
+          <th></th>
+          <th>imię</th>
+          <th>ulubiona kawa</th>
+          <th>w grze (runda)</th>
+          <th>dziś w biurze</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${state.data.team.map(p => `
+          <tr>
+            <td style="width:48px"><div class="avatar">${initials(p.name)}</div></td>
+            <td><strong>${p.name}</strong></td>
+            <td><span class="mono">${p.drink}</span></td>
+            <td>
+              ${paid.includes(p.id)
+                ? '<span class="badge badge-out">wylosowany</span>'
+                : p.todayOff
+                ? '<span class="badge badge-ho">nieobecny</span>'
+                : '<span class="badge badge-game">w grze</span>'}
+            </td>
+            <td>
+              <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px;">
+                <input type="checkbox" ${!p.todayOff ? 'checked' : ''} data-toggle-here="${p.id}"/>
+                ${p.todayOff ? 'nieobecny' : '✓ jestem'}
+              </label>
+            </td>
+            <td><button class="btn btn-ghost" style="font-size:12px">edytuj</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+/* ---------- 7. ZAKŁADKA: HISTORIA ---------- */
+function renderHistoria() {
+  return `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <h2>Historia losowań</h2>
+      <button class="btn">📥 eksport CSV</button>
+    </div>
+
+    ${state.data.rounds.map(round => {
+      const completed = round.draws.length === state.data.team.filter(p => p.active).length;
+      return `
+        <div class="history-section">
+          <div class="label">runda ${round.number} ${completed ? '(zakończona)' : '— bieżąca'} · ${round.draws.length} losowań</div>
+          ${round.draws.map(d => {
+            const m = memberById(d.memberId);
+            const p = purchaseForDraw(d.id);
+            const score = p ? avgScore(p.id) : null;
+            return `
+              <div class="history-row ${completed ? 'is-completed' : ''}">
+                <span class="date">${d.date}</span>
+                <div class="avatar" style="width:30px; height:30px; font-size:11px">${initials(m.name)}</div>
+                <span class="who">${m.name}</span>
+                <span class="what">${p ? `${p.brand} · ${p.variety}` : '<em style="color:var(--ink-soft)">brak zakupu</em>'}</span>
+                <span class="price">${p ? `${p.price} zł` : '—'}</span>
+                <span class="score">${score !== null ? score.toFixed(1) : '—'}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }).join('')}
+  `;
+}
+
+/* ---------- 8. ZAKŁADKA: STATYSTYKI ---------- */
+function renderStatystyki() {
+  const purchases = state.data.purchases;
+  const total = purchases.reduce((s, p) => s + p.price, 0);
+  const avg = total / purchases.length;
+  const ratings = state.data.ratings;
+  const avgRating = ratings.reduce((s, r) => s + r.score, 0) / ratings.length;
+  const minP = Math.min(...purchases.map(p => p.price));
+  const maxP = Math.max(...purchases.map(p => p.price));
+
+  // filiżanki — przyjmujemy ~140 espresso z 1kg ziarna (7g/shot)
+  const cupsPerKg = 140;
+  const cups = purchases.length * cupsPerKg;
+
+  // najdroższy i najlepiej oceniony zakup
+  const priciest = purchases.reduce((a, b) => b.price > a.price ? b : a);
+  const best = rankedPurchases()[0];
+
+  return `
+    <h2 style="margin-bottom:16px">Statystyki</h2>
+
+    <div class="kpi-grid">
+      <div class="kpi accent">
+        <div class="label">łącznie wydane</div>
+        <div class="value">${total} zł</div>
+        <div class="sub">rok 2026</div>
+      </div>
+      <div class="kpi">
+        <div class="label">zakupów</div>
+        <div class="value">${purchases.length}×</div>
+        <div class="sub">1kg każdy</div>
+      </div>
+      <div class="kpi">
+        <div class="label">średnia / zakup</div>
+        <div class="value">${avg.toFixed(0)} zł</div>
+        <div class="sub">min ${minP} — max ${maxP}</div>
+      </div>
+      <div class="kpi">
+        <div class="label">średnia ocen</div>
+        <div class="value">${avgRating.toFixed(1)}</div>
+        <div class="sub">/ 10</div>
+      </div>
+      <div class="kpi accent">
+        <div class="label">filiżanki ☕</div>
+        <div class="value">${cups}</div>
+        <div class="sub">~${cupsPerKg} espresso / 1kg</div>
+      </div>
+      <div class="kpi">
+        <div class="label">najdroższa</div>
+        <div class="value">${priciest.price} zł</div>
+        <div class="sub">${priciest.brand}</div>
+      </div>
+      <div class="kpi">
+        <div class="label">najlepiej oceniona</div>
+        <div class="value">${best.score.toFixed(1)}</div>
+        <div class="sub">${best.brand}</div>
+      </div>
+      <div class="kpi">
+        <div class="label">koszt / filiżanka</div>
+        <div class="value">${(total / cups).toFixed(2)} zł</div>
+        <div class="sub">średnio</div>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------- 9. ZAKŁADKA: RANKING ---------- */
+function renderRanking() {
+  const ranked = rankedPurchases();
+  const top3 = ranked.slice(0, 3);
+  const rest = ranked.slice(3);
+  const medal = (i) => ['🥇','🥈','🥉'][i] || '';
+
+  return `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <h2>Ranking</h2>
+      <button class="btn btn-primary">+ zarejestruj zakup</button>
+    </div>
+    <div class="mono" style="margin-bottom:20px">
+      kupiona po losowaniu · oceniana przez zespół (1-10) · zdjęcie torebki obowiązkowe
+    </div>
+
+    <div class="ranking-top">
+      ${top3.map((p, i) => {
+        const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
+        const buyer = memberById(draw.memberId);
+        return `
+          <div class="rank-card ${i === 0 ? 'top1' : ''}">
+            <div class="photo">
+              <span style="font-size:32px">${medal(i)}</span>
+            </div>
+            <div class="body">
+              <div class="header">
+                <span class="rank-num">#${i + 1}</span>
+                <span class="score">${p.score.toFixed(1)}</span>
+              </div>
+              <div class="brand">${p.brand}</div>
+              <div class="variety">${p.variety}</div>
+              <div class="meta">${buyer.name} · ${p.price} zł · ${p.votes} ocen</div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+
+    ${rest.length ? `
+      <div class="mono" style="margin-bottom:8px">pozostałe</div>
+      <div class="rank-list">
+        ${rest.map((p, idx) => {
+          const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
+          const buyer = memberById(draw.memberId);
+          return `
+            <div class="rank-row">
+              <span class="num">#${idx + 4}</span>
+              <div class="thumb"></div>
+              <div class="text">
+                <div class="b">${p.brand} <span class="v">· ${p.variety}</span></div>
+                <div class="v">${buyer.name} · ${p.price} zł · ${p.votes} ocen</div>
+              </div>
+              <span class="score" style="font-size:22px; font-weight:600">${p.score.toFixed(1)}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    ` : ''}
+  `;
+}
+
+/* ---------- 10. EVENTY (klikanie) ---------- */
+function attachEvents() {
+  // zmiana zakładki
+  document.querySelectorAll('.tab').forEach(el => {
+    el.onclick = () => { state.tab = el.dataset.tab; render(); };
+  });
+
+  // zmiana "kto teraz"
+  const sel = $('#who-select');
+  if (sel) sel.onchange = (e) => { state.whoAmI = e.target.value; render(); };
+
+  // przycisk LOSUJ
+  const btnDraw = $('#btn-draw');
+  if (btnDraw) btnDraw.onclick = startDraw;
+
+  // przyciski w wyniku
+  const btnBack = $('#btn-back');
+  if (btnBack) btnBack.onclick = () => {
+    state.draw = { stage: 'idle', winner: null, gifUrl: null };
+    render();
+  };
+
+  // toggle nieobecny
+  document.querySelectorAll('[data-toggle-here]').forEach(el => {
+    el.onchange = (e) => {
+      const id = el.dataset.toggleHere;
+      const m = memberById(id);
+      m.todayOff = !e.target.checked;
+      render();
+      // TODO: zapis do GitHub
+    };
+  });
+}
+
+/* ---------- 11. LOSOWANIE — animacja ---------- */
+function startDraw() {
+  const players = inGame();
+  if (players.length === 0) return;
+
+  // wybieramy zwycięzcę losowo (czysty random, fair)
+  const winner = players[Math.floor(Math.random() * players.length)];
+  state.draw.winner = winner.id;
+  state.draw.stage = 'reel';
+  render();
+
+  // animacja przewijania imion (~3.5s)
+  setTimeout(() => animateReel(winner), 50);
+}
+
+function animateReel(winner) {
+  const track = $('#reel-track');
+  if (!track) return;
+
+  const items = track.querySelectorAll('.reel-name');
+  if (items.length === 0) return;
+
+  // szerokość jednego elementu + gap
+  const itemWidth = 60 + items[0].offsetWidth; // gap + szerokość
+
+  // znajdź index zwycięzcy w środkowej trzeciej części tracka
+  // (lista jest skopiowana 5 razy, używamy 3-go bloku)
+  const players = inGame();
+  const winnerIdx = players.findIndex(p => p.id === winner.id);
+  const targetIdx = players.length * 2 + winnerIdx; // 3-ci blok
+
+  // chcemy żeby winner trafił na środek (pointer)
+  const reel = track.parentElement;
+  const reelCenter = reel.offsetWidth / 2;
+  const targetX = (targetIdx * itemWidth) + items[0].offsetWidth / 2 - reelCenter;
+
+  // animacja przez 3.5s z easing-out
+  let start = null;
+  const duration = 3500;
+
+  function tick(timestamp) {
+    if (!start) start = timestamp;
+    const elapsed = timestamp - start;
+    const progress = Math.min(elapsed / duration, 1);
+    // ease-out cubic
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const x = -targetX * eased;
+    track.style.transform = `translateX(${x}px)`;
+
+    // podświetl element pod pointerem
+    items.forEach((el, i) => {
+      const elCenter = (i * itemWidth) + items[0].offsetWidth / 2 + x;
+      const dist = Math.abs(elCenter - reelCenter);
+      const closeness = Math.max(0, 1 - dist / 200);
+      el.style.opacity = 0.3 + closeness * 0.7;
+      el.style.transform = `scale(${1 + closeness * 0.4})`;
+      el.style.color = closeness > 0.7 ? 'var(--coffee)' : 'var(--ink-2)';
+    });
+
+    if (progress < 1) {
+      requestAnimationFrame(tick);
+    } else {
+      // koniec animacji → wynik
+      setTimeout(() => {
+        state.draw.stage = 'wynik';
+        render();
+        loadGif();
+        spawnConfetti();
+      }, 400);
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ---------- 12. GIPHY ---------- */
+async function loadGif() {
+  const slot = $('#gif-slot');
+  if (!slot) return;
+  // klucz publiczny demo-grade — w produkcji wstaw własny
+  const KEY = 'dc6zaTOxFJmzC'; // public beta key (giphy api)
+  const tags = ['coffee', 'celebration', 'drama', 'wow'];
+  const tag = tags[Math.floor(Math.random() * tags.length)];
+  try {
+    const res = await fetch(`https://api.giphy.com/v1/gifs/random?api_key=${KEY}&tag=${tag}&rating=g`);
+    const json = await res.json();
+    const url = json.data?.images?.fixed_height?.url;
+    if (url) {
+      slot.innerHTML = `<img src="${url}" alt="mem"/>`;
+    } else {
+      slot.innerHTML = '<span class="mono">brak gifa 😅</span>';
+    }
+  } catch (e) {
+    slot.innerHTML = '<span class="mono">giphy offline</span>';
+  }
+}
+
+/* ---------- 13. KONFETTI ---------- */
+function spawnConfetti() {
+  const stage = $('#result-stage');
+  if (!stage) return;
+  const colors = ['#8b5a2b','#c9a55b','#e9d8b8','#6b3e1a','#b54b3a'];
+  for (let i = 0; i < 30; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.left = Math.random() * 100 + '%';
+    c.style.background = colors[Math.floor(Math.random() * colors.length)];
+    c.style.animationDelay = Math.random() * 0.6 + 's';
+    c.style.transform = `rotate(${Math.random() * 360}deg)`;
+    stage.appendChild(c);
+    setTimeout(() => c.remove(), 2200);
+  }
+}
+
+/* ---------- 14. START ---------- */
+(async function init() {
+  await loadData();
+  render();
+})();

@@ -1,0 +1,57 @@
+{
+  "team": [
+    { "id": "kasia",   "name": "Kasia",   "drink": "latte",      "active": true,  "todayOff": false },
+    { "id": "marek",   "name": "Marek",   "drink": "czarna",     "active": true,  "todayOff": false },
+    { "id": "ania",    "name": "Ania",    "drink": "flat white", "active": true,  "todayOff": true  },
+    { "id": "tomek",   "name": "Tomek",   "drink": "cappuccino", "active": true,  "todayOff": false },
+    { "id": "justyna", "name": "Justyna", "drink": "espresso",   "active": true,  "todayOff": false },
+    { "id": "piotrek", "name": "Piotrek", "drink": "macchiato",  "active": true,  "todayOff": false }
+  ],
+  "currentRound": 3,
+  "rounds": [
+    {
+      "number": 3,
+      "draws": [
+        { "id": "d31", "memberId": "kasia", "date": "2026-05-05" },
+        { "id": "d32", "memberId": "marek", "date": "2026-04-28" },
+        { "id": "d33", "memberId": "ania",  "date": "2026-04-21" }
+      ]
+    },
+    {
+      "number": 2,
+      "draws": [
+        { "id": "d21", "memberId": "justyna", "date": "2026-04-14" },
+        { "id": "d22", "memberId": "piotrek", "date": "2026-04-07" },
+        { "id": "d23", "memberId": "tomek",   "date": "2026-03-31" },
+        { "id": "d24", "memberId": "kasia",   "date": "2026-03-24" },
+        { "id": "d25", "memberId": "marek",   "date": "2026-03-17" },
+        { "id": "d26", "memberId": "ania",    "date": "2026-03-10" }
+      ]
+    }
+  ],
+  "purchases": [
+    { "id": "p1", "drawId": "d31", "brand": "La Pajura",    "variety": "Brazil Yellow Bourbon", "price": 89, "photo": "photos/p1.jpg" },
+    { "id": "p2", "drawId": "d32", "brand": "HAYB",          "variety": "Etiopia Sidamo",        "price": 78, "photo": "photos/p2.jpg" },
+    { "id": "p3", "drawId": "d33", "brand": "Coffee Plant",  "variety": "Kolumbia Supremo",      "price": 65, "photo": "photos/p3.jpg" },
+    { "id": "p4", "drawId": "d21", "brand": "Tchibo",        "variety": "Espresso Sicilia",      "price": 48, "photo": "photos/p4.jpg" },
+    { "id": "p5", "drawId": "d22", "brand": "Biedronka",     "variety": "kawa ziarnista",        "price": 29, "photo": "photos/p5.jpg" },
+    { "id": "p6", "drawId": "d23", "brand": "Lavazza",       "variety": "Crema e Gusto",         "price": 52, "photo": "photos/p6.jpg" }
+  ],
+  "ratings": [
+    { "purchaseId": "p1", "memberId": "marek",   "score": 9 },
+    { "purchaseId": "p1", "memberId": "ania",    "score": 10 },
+    { "purchaseId": "p1", "memberId": "tomek",   "score": 9 },
+    { "purchaseId": "p1", "memberId": "justyna", "score": 9 },
+    { "purchaseId": "p1", "memberId": "piotrek", "score": 9 },
+    { "purchaseId": "p2", "memberId": "kasia",   "score": 9 },
+    { "purchaseId": "p2", "memberId": "ania",    "score": 8 },
+    { "purchaseId": "p2", "memberId": "tomek",   "score": 9 },
+    { "purchaseId": "p2", "memberId": "justyna", "score": 9 },
+    { "purchaseId": "p2", "memberId": "piotrek", "score": 9 },
+    { "purchaseId": "p3", "memberId": "kasia",   "score": 8 },
+    { "purchaseId": "p3", "memberId": "marek",   "score": 8 },
+    { "purchaseId": "p3", "memberId": "tomek",   "score": 7 },
+    { "purchaseId": "p3", "memberId": "justyna", "score": 8 },
+    { "purchaseId": "p3", "memberId": "piotrek", "score": 9 }
+  ]
+}
