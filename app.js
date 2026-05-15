@@ -373,6 +373,7 @@ function renderZespol() {
   return `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
       <h2>Zespół (${state.data.team.length})</h2>
+      <button class="btn btn-primary" id="btn-open-add-member">+ dodaj uczestnika</button>
     </div>
     <table class="data">
       <thead>
@@ -601,8 +602,9 @@ function renderRanking() {
 
 /* ---------- 10. MODALE ---------- */
 function renderModal() {
-  if (state.modal === 'purchase') return renderModalPurchase();
-  if (state.modal === 'rating')   return renderModalRating();
+  if (state.modal === 'purchase')   return renderModalPurchase();
+  if (state.modal === 'rating')     return renderModalRating();
+  if (state.modal === 'addMember')  return renderModalAddMember();
   return '';
 }
 
@@ -667,6 +669,34 @@ function renderModalRating() {
           <button class="btn btn-ghost" id="modal-close-2">Anuluj</button>
           <button class="btn btn-primary" id="btn-save-rating" ${state.saving ? 'disabled' : ''}>
             Zapisz ocenę
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderModalAddMember() {
+  return `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>👤 Dodaj uczestnika</h3>
+          <button class="btn btn-ghost" id="modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <label class="field-label">Imię</label>
+          <input class="field-input" id="f-member-name" placeholder="np. Zosia" autocomplete="off" />
+
+          <label class="field-label">Ulubiona kawa</label>
+          <input class="field-input" id="f-member-drink" placeholder="np. flat white, espresso..." />
+
+          ${state.saving ? '<div class="mono" style="color:var(--coffee); margin-top:8px">zapisuję...</div>' : ''}
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" id="modal-close-2">Anuluj</button>
+          <button class="btn btn-primary" id="btn-save-member" ${state.saving ? 'disabled' : ''}>
+            Dodaj do zespołu
           </button>
         </div>
       </div>
@@ -773,6 +803,18 @@ function attachEvents() {
   document.querySelectorAll('[data-toggle-here]').forEach(el => {
     el.onchange = (e) => togglePresence(el.dataset.toggleHere, !e.target.checked);
   });
+
+  // dodaj uczestnika — otwórz modal
+  const btnOpenAddMember = $('#btn-open-add-member');
+  if (btnOpenAddMember) btnOpenAddMember.onclick = () => {
+    state.modal = 'addMember';
+    state.modalData = {};
+    render();
+  };
+
+  // dodaj uczestnika — zapisz
+  const btnSaveMember = $('#btn-save-member');
+  if (btnSaveMember) btnSaveMember.onclick = saveNewMember;
 }
 
 /* ---------- 12. AKCJE ZAPISU ---------- */
@@ -892,6 +934,50 @@ async function saveRating() {
   }
 }
 
+async function saveNewMember() {
+  const name  = $('#f-member-name')?.value?.trim();
+  const drink = $('#f-member-drink')?.value?.trim() || 'kawa';
+
+  if (!name) {
+    alert('Wpisz imię uczestnika.');
+    return;
+  }
+
+  const nameExists = state.data.team.some(p => p.name.toLowerCase() === name.toLowerCase());
+  if (nameExists) {
+    alert(`„${name}" już jest w zespole.`);
+    return;
+  }
+
+  state.saving = true;
+  render();
+
+  try {
+    const memberId = 'm' + uid();
+    await sb.post('team', {
+      id: memberId,
+      name,
+      drink,
+      active: true,
+      today_off: false,
+    });
+
+    // dodaj lokalnie
+    state.data.team.push({ id: memberId, name, drink, active: true, today_off: false });
+    state.data.team.sort((a, b) => a.name.localeCompare(b.name));
+
+    state.modal = null;
+    state.modalData = {};
+    state.saving = false;
+    render();
+  } catch (err) {
+    console.error('Błąd zapisu uczestnika:', err);
+    state.saving = false;
+    alert('Błąd zapisu: ' + err.message);
+    render();
+  }
+}
+
 async function togglePresence(memberId, isOff) {
   const member = memberById(memberId);
   if (!member) return;
@@ -986,7 +1072,7 @@ function spawnConfetti() {
   const colors = ['#8b5a2b','#c9a55b','#e9d8b8','#6b3e1a','#b54b3a'];
   for (let i = 0; i < 30; i++) {
     const c = document.createElement('div');
-    c.className = 'style.confetti';
+    c.className = 'confetti';
     c.style.left = Math.random() * 100 + '%';
     c.style.background = colors[Math.floor(Math.random() * colors.length)];
     c.style.animationDelay = Math.random() * 0.6 + 's';
