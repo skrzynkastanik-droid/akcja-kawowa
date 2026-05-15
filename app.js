@@ -256,7 +256,7 @@ function renderDrawIdle() {
           LOSUJ
         </button>
         <div class="draw-hint">
-          ${canDraw ? '' : 'runda zakończona — wszyscy raz stawiali'}
+          ${canDraw ? '' : 'runda zakończona'}
         </div>
       </div>
 
