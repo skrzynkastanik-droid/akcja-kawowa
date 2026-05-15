@@ -256,7 +256,7 @@ function renderDrawIdle() {
           LOSUJ
         </button>
         <div class="draw-hint">
-          ${canDraw ? '' : 'runda zakończona'}
+          ${canDraw ? '' : 'Runda zakończona'}
         </div>
       </div>
 
@@ -270,7 +270,7 @@ function renderDrawIdle() {
                 <span class="name">${p.name}</span>
                 <span class="badge badge-game">w grze</span>
               </div>
-            `).join('') || '<div class="mono" style="padding:8px">brak — runda się skończyła</div>'}
+            `).join('') || '<div class="mono" style="padding:8px">Brak. Runda się skończyła</div>'}
           </div>
 
           ${out().length ? `
