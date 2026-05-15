@@ -372,7 +372,7 @@ function renderZespol() {
   const paid = paidThisRound();
   return `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
-      <h2>Zespół (${state.data.team.length})</h2>
+      <h2>Zespół (${state.data.team.filter(p => p.active).length})</h2>
       <button class="btn btn-primary" id="btn-open-add-member">+ dodaj uczestnika</button>
     </div>
     <table class="data">
@@ -381,12 +381,13 @@ function renderZespol() {
           <th></th>
           <th>imię</th>
           <th>ulubiona kawa</th>
-          <th>w grze (runda)</th>
+          <th>status w rundzie</th>
           <th>dziś w biurze</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
-        ${state.data.team.map(p => `
+        ${state.data.team.filter(p => p.active).map(p => `
           <tr>
             <td style="width:48px"><div class="avatar">${initials(p.name)}</div></td>
             <td><strong>${p.name}</strong></td>
@@ -399,10 +400,15 @@ function renderZespol() {
                 : '<span class="badge badge-game">w grze</span>'}
             </td>
             <td>
-              <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; cursor:pointer">
-                <input type="checkbox" ${!p.today_off ? 'checked' : ''} data-toggle-here="${p.id}"/>
-                ${p.today_off ? 'nieobecny' : '✓ jestem'}
-              </label>
+              <div class="presence-toggle">
+                <button class="presence-btn ${!p.today_off ? 'active-here' : ''}"
+                  data-presence="${p.id}" data-off="false">✓ W biurze</button>
+                <button class="presence-btn ${p.today_off ? 'active-off' : ''}"
+                  data-presence="${p.id}" data-off="true">✕ Nieobecny</button>
+              </div>
+            </td>
+            <td style="width:40px; text-align:center">
+              <button class="btn-deactivate" data-deactivate="${p.id}" title="Usuń uczestnika">✕</button>
             </td>
           </tr>
         `).join('')}
@@ -799,9 +805,17 @@ function attachEvents() {
     };
   });
 
-  // toggle nieobecny
-  document.querySelectorAll('[data-toggle-here]').forEach(el => {
-    el.onchange = (e) => togglePresence(el.dataset.toggleHere, !e.target.checked);
+  // przyciski obecności (W biurze / Nieobecny)
+  document.querySelectorAll('[data-presence]').forEach(el => {
+    el.onclick = () => {
+      const isOff = el.dataset.off === 'true';
+      togglePresence(el.dataset.presence, isOff);
+    };
+  });
+
+  // dezaktywacja uczestnika
+  document.querySelectorAll('[data-deactivate]').forEach(el => {
+    el.onclick = () => deactivateMember(el.dataset.deactivate);
   });
 
   // dodaj uczestnika — otwórz modal
@@ -975,6 +989,25 @@ async function saveNewMember() {
     state.saving = false;
     alert('Błąd zapisu: ' + err.message);
     render();
+  }
+}
+
+async function deactivateMember(memberId) {
+  const member = memberById(memberId);
+  if (!member) return;
+  if (!confirm(`Usunąć ${member.name} z zespołu? Osoba zniknie z losowania, ale historia pozostanie.`)) return;
+
+  // optymistyczna aktualizacja
+  member.active = false;
+  render();
+
+  try {
+    await sb.patch('team', `id=eq.${memberId}`, { active: false });
+  } catch (err) {
+    console.error('Błąd dezaktywacji:', err);
+    member.active = true;
+    render();
+    alert('Błąd: ' + err.message);
   }
 }
 

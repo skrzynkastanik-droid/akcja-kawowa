@@ -733,3 +733,62 @@ table.data tr:hover { background: var(--paper-2); }
   border-color: var(--coffee);
   color: white;
 }
+
+/* ── presence toggle ─────────────────────────────── */
+.presence-toggle {
+  display: inline-flex;
+  border: 1px solid var(--ink-3, #ccc);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.presence-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  border: none;
+  background: transparent;
+  color: var(--ink-2, #666);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.presence-btn:hover {
+  background: var(--ink-4, #f0f0f0);
+}
+
+.presence-btn.active-here {
+  background: #d4edda;
+  color: #276135;
+  font-weight: 600;
+}
+
+.presence-btn.active-off {
+  background: #fde8e8;
+  color: #a82020;
+  font-weight: 600;
+}
+
+/* separator między przyciskami */
+.presence-btn + .presence-btn {
+  border-left: 1px solid var(--ink-3, #ccc);
+}
+
+/* ── btn-deactivate ──────────────────────────────── */
+.btn-deactivate {
+  background: none;
+  border: none;
+  color: var(--ink-3, #bbb);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+  line-height: 1;
+}
+
+.btn-deactivate:hover {
+  color: #a82020;
+  background: #fde8e8;
+}
