@@ -1,49 +1,116 @@
-/* ============================================================
+/* =============================================
    AKCJA KAWOWA — app.js
-   Cała logika strony: ładowanie danych, zakładki, losowanie.
-   Vanilla JS — bez frameworków. Komentarze po polsku.
-   ============================================================ */
+   Data layer: Supabase (zamiast data.json)
+   ============================================= */
 
-/* ---------- 1. STAN APLIKACJI ----------
-   Cała aplikacja trzyma swój stan w jednym obiekcie `state`.
-   Przy każdej zmianie wołamy `render()` żeby przerysować widok. */
-const state = {
-  data: null,           // dane z data.json
-  tab: 'losowanie',     // aktualna zakładka
-  whoAmI: 'marek',      // kto teraz korzysta — wybierane w nagłówku
-  draw: {
-    stage: 'idle',      // 'idle' | 'reel' | 'wynik'
-    winner: null,       // wylosowana osoba (id)
-    gifUrl: null,       // gif z Giphy
+/* ---------- 0. KONFIGURACJA SUPABASE ---------- */
+const SUPABASE_URL = 'https://uhatlvlnlhzlknjlaqpd.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_Bo_PxUx9tuojImnHrsOA5g_yOah2Wj1';
+const STORAGE_BUCKET = 'coffee-photos';
+
+const headers = {
+  'apikey': SUPABASE_KEY,
+  'Authorization': `Bearer ${SUPABASE_KEY}`,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=representation',
+};
+
+/* Supabase REST helpers */
+const sb = {
+  async get(table, params = '') {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers });
+    if (!res.ok) throw new Error(`GET ${table} failed: ${res.status}`);
+    return res.json();
+  },
+  async post(table, body) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST', headers, body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`POST ${table} failed: ${res.status}`);
+    return res.json();
+  },
+  async patch(table, filter, body) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
+      method: 'PATCH', headers, body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`PATCH ${table} failed: ${res.status}`);
+    return res.json();
+  },
+  async uploadPhoto(file, path) {
+    const uploadHeaders = {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': file.type,
+      'Cache-Control': '3600',
+    };
+    const res = await fetch(
+      `${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${path}`,
+      { method: 'POST', headers: uploadHeaders, body: file }
+    );
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${path}`;
   },
 };
 
-/* ---------- 2. ŁADOWANIE DANYCH ----------
-   Ładujemy data.json. fetch() to wbudowana funkcja przeglądarki
-   do pobierania plików. await czeka aż się załaduje. */
+/* ---------- 1. STAN APLIKACJI ---------- */
+const state = {
+  data: null,
+  tab: 'losowanie',
+  whoAmI: localStorage.getItem('akcja-kawowa-who') || null,
+  draw: { stage: 'idle', winner: null, gifUrl: null },
+  modal: null, // 'purchase' | 'rating' | null
+  modalData: {},
+  saving: false,
+};
+
+/* ---------- 2. ŁADOWANIE DANYCH ---------- */
 async function loadData() {
-  const res = await fetch('data.json');
-  state.data = await res.json();
+  const [team, rounds, draws, purchases, ratings] = await Promise.all([
+    sb.get('team', 'order=name'),
+    sb.get('rounds', 'order=number.desc'),
+    sb.get('draws', 'order=draw_date.desc'),
+    sb.get('purchases', 'order=id'),
+    sb.get('ratings', 'order=id'),
+  ]);
+
+  const currentRound = rounds.find(r => r.is_current);
+
+  // normalizujemy do struktury podobnej do data.json
+  state.data = {
+    team,
+    currentRound: currentRound?.number ?? 1,
+    rounds: rounds.map(r => ({
+      number: r.number,
+      draws: draws
+        .filter(d => d.round_number === r.number)
+        .map(d => ({ id: d.id, memberId: d.member_id, date: d.draw_date })),
+    })),
+    purchases: purchases.map(p => ({
+      id: p.id, drawId: p.draw_id, brand: p.brand,
+      variety: p.variety, price: p.price, photo: p.photo_url,
+    })),
+    ratings: ratings.map(r => ({
+      purchaseId: r.purchase_id, memberId: r.member_id, score: r.score,
+    })),
+  };
 }
 
-/* ---------- 3. POMOCNICZE FUNKCJE ----------
-   Krótkie funkcje używane w wielu miejscach. */
+/* ---------- 3. POMOCNICZE FUNKCJE ---------- */
 const $ = (sel) => document.querySelector(sel);
 const byId = (list, id) => list.find(x => x.id === id);
 const memberById = (id) => byId(state.data.team, id);
 const initials = (name) => name.slice(0, 2).toUpperCase();
+const uid = () => Math.random().toString(36).slice(2, 10);
 
-/* zwraca listę osób które stawiały w bieżącej rundzie */
 function paidThisRound() {
   const round = state.data.rounds.find(r => r.number === state.data.currentRound);
   if (!round) return [];
   return round.draws.map(d => d.memberId);
 }
 
-/* zwraca listę osób w grze (nie odpadli, są w biurze) */
 function inGame() {
   const paid = paidThisRound();
-  return state.data.team.filter(p => p.active && !p.todayOff && !paid.includes(p.id));
+  return state.data.team.filter(p => p.active && !p.today_off && !paid.includes(p.id));
 }
 
 function out() {
@@ -52,17 +119,15 @@ function out() {
 }
 
 function ho() {
-  return state.data.team.filter(p => p.active && p.todayOff);
+  return state.data.team.filter(p => p.active && p.today_off);
 }
 
-/* średnia ocena dla zakupu */
 function avgScore(purchaseId) {
   const rs = state.data.ratings.filter(r => r.purchaseId === purchaseId);
   if (rs.length === 0) return null;
   return rs.reduce((s, r) => s + r.score, 0) / rs.length;
 }
 
-/* zwraca rankingi zakupów posortowane po ocenie */
 function rankedPurchases() {
   return state.data.purchases
     .map(p => ({ ...p, score: avgScore(p.id), votes: state.data.ratings.filter(r => r.purchaseId === p.id).length }))
@@ -70,22 +135,50 @@ function rankedPurchases() {
     .sort((a, b) => b.score - a.score);
 }
 
-/* znajduje zakup po drawId */
 function purchaseForDraw(drawId) {
   return state.data.purchases.find(p => p.drawId === drawId);
 }
 
-/* ---------- 4. RENDER GŁÓWNY ----------
-   render() wywoływany jest po każdej zmianie stanu. */
+function myRatingForPurchase(purchaseId) {
+  return state.data.ratings.find(r => r.purchaseId === purchaseId && r.memberId === state.whoAmI);
+}
+
+/* ---------- 4. RENDER GŁÓWNY ---------- */
 function render() {
+  if (!state.whoAmI) {
+    $('#app').innerHTML = renderWhoAmI();
+    attachEvents();
+    return;
+  }
+
   $('#app').innerHTML = `
     ${renderTopbar()}
     ${renderTabs()}
     <div id="tab-content" class="fade-in">
       ${renderTab()}
     </div>
+    ${state.modal ? renderModal() : ''}
   `;
   attachEvents();
+}
+
+/* ---------- EKRAN WYBORU OSOBY ---------- */
+function renderWhoAmI() {
+  return `
+    <div class="whoami-screen">
+      <div class="brand-logo" style="font-size:48px; margin-bottom:12px">☕</div>
+      <h1 style="margin-bottom:4px">Kawa prawem, nie towarem</h1>
+      <div class="mono" style="margin-bottom:32px; color:var(--ink-soft)">kim jesteś?</div>
+      <div class="whoami-list">
+        ${state.data.team.filter(p => p.active).map(p => `
+          <button class="whoami-btn" data-who="${p.id}">
+            <div class="avatar avatar-lg">${initials(p.name)}</div>
+            <span>${p.name}</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
 }
 
 function renderTopbar() {
@@ -163,9 +256,7 @@ function renderDrawIdle() {
           LOSUJ
         </button>
         <div class="draw-hint">
-          ${canDraw
-            ? '\n'
-            : 'runda zakończona — wszyscy raz stawiali'}
+          ${canDraw ? '' : 'runda zakończona — wszyscy raz stawiali'}
         </div>
       </div>
 
@@ -217,8 +308,6 @@ function renderDrawIdle() {
               ${initials(lastMember.name)}
             </div>
             <div class="info">
-              <div class="mono">
-</div>
               <div class="who">${lastMember.name} kupiła</div>
               <div style="font-size:13px; color:var(--ink-2)">
                 ${lastPurchase.brand} · ${lastPurchase.variety} · ${lastPurchase.price} zł
@@ -232,16 +321,13 @@ function renderDrawIdle() {
 }
 
 function renderDrawReel() {
-  // reel pokazuje przewijające się imiona
   const players = inGame();
-  // powtarzamy listę x3 żeby długi pas
   const long = [...players, ...players, ...players, ...players, ...players];
   return `
     <div class="draw-stage" style="grid-template-columns: 1fr">
       <div class="draw-main">
         <div class="mono" style="margin-bottom: 8px; color: var(--coffee);">● TRWA LOSOWANIE ●</div>
         <div class="draw-headline">kto to będzie...?</div>
-
         <div class="reel">
           <div class="reel-line"></div>
           <div class="reel-pointer-top"></div>
@@ -250,7 +336,6 @@ function renderDrawReel() {
             ${long.map(p => `<div class="reel-name">${p.name}</div>`).join('')}
           </div>
         </div>
-
         <div class="draw-hint">drum roll... 🥁</div>
       </div>
     </div>
@@ -267,19 +352,15 @@ function renderDrawResult() {
       </div>
       <div class="result-name">${winner.name}!</div>
       <div class="result-tagline">kupujesz 1kg kawy ziarnistej</div>
-
       <div class="result-meta">
         <span class="chip">📅 do końca tygodnia</span>
         <span class="chip">📷 zdjęcie torebki obowiązkowe</span>
       </div>
-
       <div class="result-gif" id="gif-slot">
         <span class="mono">ładuję mem...</span>
       </div>
-
       <div class="result-actions">
         <button class="btn btn-primary" id="btn-register">📷 zarejestruj zakup</button>
-        <button class="btn" id="btn-calendar">📅 dodaj do kalendarza</button>
         <button class="btn btn-ghost" id="btn-back">← powrót</button>
       </div>
     </div>
@@ -292,9 +373,6 @@ function renderZespol() {
   return `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
       <h2>Zespół (${state.data.team.length})</h2>
-      <div style="display:flex; gap:8px;">
-        <button class="btn">+ dodaj osobę</button>
-      </div>
     </div>
     <table class="data">
       <thead>
@@ -304,7 +382,6 @@ function renderZespol() {
           <th>ulubiona kawa</th>
           <th>w grze (runda)</th>
           <th>dziś w biurze</th>
-          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -316,17 +393,16 @@ function renderZespol() {
             <td>
               ${paid.includes(p.id)
                 ? '<span class="badge badge-out">wylosowany</span>'
-                : p.todayOff
+                : p.today_off
                 ? '<span class="badge badge-ho">nieobecny</span>'
                 : '<span class="badge badge-game">w grze</span>'}
             </td>
             <td>
-              <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px;">
-                <input type="checkbox" ${!p.todayOff ? 'checked' : ''} data-toggle-here="${p.id}"/>
-                ${p.todayOff ? 'nieobecny' : '✓ jestem'}
+              <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; cursor:pointer">
+                <input type="checkbox" ${!p.today_off ? 'checked' : ''} data-toggle-here="${p.id}"/>
+                ${p.today_off ? 'nieobecny' : '✓ jestem'}
               </label>
             </td>
-            <td><button class="btn btn-ghost" style="font-size:12px">edytuj</button></td>
           </tr>
         `).join('')}
       </tbody>
@@ -339,9 +415,7 @@ function renderHistoria() {
   return `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
       <h2>Historia losowań</h2>
-      <button class="btn">📥 eksport CSV</button>
     </div>
-
     ${state.data.rounds.map(round => {
       const completed = round.draws.length === state.data.team.filter(p => p.active).length;
       return `
@@ -371,24 +445,22 @@ function renderHistoria() {
 /* ---------- 8. ZAKŁADKA: STATYSTYKI ---------- */
 function renderStatystyki() {
   const purchases = state.data.purchases;
+  if (purchases.length === 0) return '<div class="mono" style="padding:40px;text-align:center">brak danych</div>';
+
   const total = purchases.reduce((s, p) => s + p.price, 0);
   const avg = total / purchases.length;
   const ratings = state.data.ratings;
-  const avgRating = ratings.reduce((s, r) => s + r.score, 0) / ratings.length;
+  const avgRating = ratings.length ? ratings.reduce((s, r) => s + r.score, 0) / ratings.length : 0;
   const minP = Math.min(...purchases.map(p => p.price));
   const maxP = Math.max(...purchases.map(p => p.price));
-
-  // filiżanki — przyjmujemy ~140 espresso z 1kg ziarna (7g/shot)
   const cupsPerKg = 140;
   const cups = purchases.length * cupsPerKg;
-
-  // najdroższy i najlepiej oceniony zakup
   const priciest = purchases.reduce((a, b) => b.price > a.price ? b : a);
-  const best = rankedPurchases()[0];
+  const ranked = rankedPurchases();
+  const best = ranked[0];
 
   return `
     <h2 style="margin-bottom:16px">Statystyki</h2>
-
     <div class="kpi-grid">
       <div class="kpi accent">
         <div class="label">łącznie wydane</div>
@@ -420,6 +492,7 @@ function renderStatystyki() {
         <div class="value">${priciest.price} zł</div>
         <div class="sub">${priciest.brand}</div>
       </div>
+      ${best ? `
       <div class="kpi">
         <div class="label">najlepiej oceniona</div>
         <div class="value">${best.score.toFixed(1)}</div>
@@ -430,6 +503,7 @@ function renderStatystyki() {
         <div class="value">${(total / cups).toFixed(2)} zł</div>
         <div class="sub">średnio</div>
       </div>
+      ` : ''}
     </div>
   `;
 }
@@ -441,15 +515,39 @@ function renderRanking() {
   const rest = ranked.slice(3);
   const medal = (i) => ['🥇','🥈','🥉'][i] || '';
 
+  // zakupy bez ocen — można ocenić
+  const unrated = state.data.purchases.filter(p => {
+    const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
+    if (!draw) return false;
+    const isMine = draw.memberId === state.whoAmI;
+    const alreadyRated = myRatingForPurchase(p.id);
+    return !isMine && !alreadyRated;
+  });
+
   return `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
       <h2>Ranking</h2>
-      <button class="btn btn-primary">+ zarejestruj zakup</button>
+      <button class="btn btn-primary" id="btn-open-register">+ zarejestruj zakup</button>
     </div>
     <div class="mono" style="margin-bottom:20px">
       kupiona po losowaniu · oceniana przez zespół (1-10) · zdjęcie torebki obowiązkowe
     </div>
 
+    ${unrated.length > 0 ? `
+      <div class="card" style="margin-bottom:20px; border-left: 3px solid var(--coffee);">
+        <h3 style="margin-bottom:12px">⭐ oceń kawę</h3>
+        ${unrated.map(p => `
+          <div class="history-row" style="margin-bottom:8px">
+            <span class="what">${p.brand} · ${p.variety}</span>
+            <button class="btn btn-primary" style="font-size:12px; padding:4px 10px" data-rate="${p.id}">
+              oceń
+            </button>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+
+    ${ranked.length === 0 ? '<div class="mono" style="padding:40px;text-align:center;color:var(--ink-soft)">brak ocenionych zakupów</div>' : `
     <div class="ranking-top">
       ${top3.map((p, i) => {
         const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
@@ -457,7 +555,9 @@ function renderRanking() {
         return `
           <div class="rank-card ${i === 0 ? 'top1' : ''}">
             <div class="photo">
-              <span style="font-size:32px">${medal(i)}</span>
+              ${p.photo
+                ? `<img src="${p.photo}" alt="kawa" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>`
+                : `<span style="font-size:32px">${medal(i)}</span>`}
             </div>
             <div class="body">
               <div class="header">
@@ -482,7 +582,9 @@ function renderRanking() {
           return `
             <div class="rank-row">
               <span class="num">#${idx + 4}</span>
-              <div class="thumb"></div>
+              <div class="thumb">
+                ${p.photo ? `<img src="${p.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:4px"/>` : ''}
+              </div>
               <div class="text">
                 <div class="b">${p.brand} <span class="v">· ${p.variety}</span></div>
                 <div class="v">${buyer.name} · ${p.price} zł · ${p.votes} ocen</div>
@@ -493,11 +595,96 @@ function renderRanking() {
         }).join('')}
       </div>
     ` : ''}
+    `}
   `;
 }
 
-/* ---------- 10. EVENTY (klikanie) ---------- */
+/* ---------- 10. MODALE ---------- */
+function renderModal() {
+  if (state.modal === 'purchase') return renderModalPurchase();
+  if (state.modal === 'rating')   return renderModalRating();
+  return '';
+}
+
+function renderModalPurchase() {
+  const drawId = state.modalData.drawId || '';
+  return `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>📷 Zarejestruj zakup</h3>
+          <button class="btn btn-ghost" id="modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <label class="field-label">Palarnia / marka</label>
+          <input class="field-input" id="f-brand" placeholder="np. HAYB, La Pajura..." />
+
+          <label class="field-label">Odmiana / blend</label>
+          <input class="field-input" id="f-variety" placeholder="np. Etiopia Sidamo" />
+
+          <label class="field-label">Cena (zł)</label>
+          <input class="field-input" id="f-price" type="number" placeholder="np. 79" />
+
+          <label class="field-label">Zdjęcie torebki</label>
+          <input class="field-input" id="f-photo" type="file" accept="image/*" />
+
+          ${state.saving ? '<div class="mono" style="color:var(--coffee); margin-top:8px">zapisuję...</div>' : ''}
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" id="modal-close-2">Anuluj</button>
+          <button class="btn btn-primary" id="btn-save-purchase" ${state.saving ? 'disabled' : ''}>
+            Zapisz zakup
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderModalRating() {
+  const purchase = state.data.purchases.find(p => p.id === state.modalData.purchaseId);
+  const currentScore = state.modalData.score || 5;
+  return `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>⭐ Oceń kawę</h3>
+          <button class="btn btn-ghost" id="modal-close">✕</button>
+        </div>
+        <div class="modal-body" style="text-align:center">
+          <div style="font-size:18px; font-weight:600; margin-bottom:4px">${purchase.brand}</div>
+          <div class="mono" style="margin-bottom:24px">${purchase.variety}</div>
+
+          <div class="score-picker">
+            ${[1,2,3,4,5,6,7,8,9,10].map(n => `
+              <button class="score-btn ${n === currentScore ? 'active' : ''}" data-score="${n}">${n}</button>
+            `).join('')}
+          </div>
+          <div class="mono" style="margin-top:8px">wybrana ocena: <strong>${currentScore}</strong> / 10</div>
+          ${state.saving ? '<div class="mono" style="color:var(--coffee); margin-top:8px">zapisuję...</div>' : ''}
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" id="modal-close-2">Anuluj</button>
+          <button class="btn btn-primary" id="btn-save-rating" ${state.saving ? 'disabled' : ''}>
+            Zapisz ocenę
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------- 11. EVENTY ---------- */
 function attachEvents() {
+  // wybór osoby (ekran startowy)
+  document.querySelectorAll('[data-who]').forEach(el => {
+    el.onclick = () => {
+      state.whoAmI = el.dataset.who;
+      localStorage.setItem('akcja-kawowa-who', state.whoAmI);
+      render();
+    };
+  });
+
   // zmiana zakładki
   document.querySelectorAll('.tab').forEach(el => {
     el.onclick = () => { state.tab = el.dataset.tab; render(); };
@@ -505,46 +692,225 @@ function attachEvents() {
 
   // zmiana "kto teraz"
   const sel = $('#who-select');
-  if (sel) sel.onchange = (e) => { state.whoAmI = e.target.value; render(); };
+  if (sel) sel.onchange = (e) => {
+    state.whoAmI = e.target.value;
+    localStorage.setItem('akcja-kawowa-who', state.whoAmI);
+    render();
+  };
 
   // przycisk LOSUJ
   const btnDraw = $('#btn-draw');
   if (btnDraw) btnDraw.onclick = startDraw;
 
-  // przyciski w wyniku
+  // powrót z wyniku
   const btnBack = $('#btn-back');
   if (btnBack) btnBack.onclick = () => {
     state.draw = { stage: 'idle', winner: null, gifUrl: null };
     render();
   };
 
+  // zarejestruj zakup (z ekranu wyniku)
+  const btnRegister = $('#btn-register');
+  if (btnRegister) btnRegister.onclick = () => {
+    const winnerDraw = state.data.rounds
+      .flatMap(r => r.draws)
+      .find(d => d.memberId === state.draw.winner);
+    state.modal = 'purchase';
+    state.modalData = { drawId: winnerDraw?.id };
+    render();
+  };
+
+  // zarejestruj zakup (z rankingu)
+  const btnOpenRegister = $('#btn-open-register');
+  if (btnOpenRegister) btnOpenRegister.onclick = () => {
+    // znajdź draw bieżącego użytkownika bez zakupu
+    const myDraw = state.data.rounds
+      .flatMap(r => r.draws)
+      .find(d => d.memberId === state.whoAmI && !purchaseForDraw(d.id));
+    state.modal = 'purchase';
+    state.modalData = { drawId: myDraw?.id };
+    render();
+  };
+
+  // zamknij modal
+  ['modal-close', 'modal-close-2', 'modal-overlay'].forEach(id => {
+    const el = $(`#${id}`);
+    if (el) el.onclick = (e) => {
+      if (id !== 'modal-overlay' || e.target === el) {
+        state.modal = null;
+        state.modalData = {};
+        render();
+      }
+    };
+  });
+
+  // zapisz zakup
+  const btnSavePurchase = $('#btn-save-purchase');
+  if (btnSavePurchase) btnSavePurchase.onclick = savePurchase;
+
+  // przyciski oceny
+  document.querySelectorAll('.score-btn').forEach(el => {
+    el.onclick = () => {
+      state.modalData.score = parseInt(el.dataset.score);
+      render();
+    };
+  });
+
+  // zapisz ocenę
+  const btnSaveRating = $('#btn-save-rating');
+  if (btnSaveRating) btnSaveRating.onclick = saveRating;
+
+  // oceń kawę (przyciski w rankingu)
+  document.querySelectorAll('[data-rate]').forEach(el => {
+    el.onclick = () => {
+      state.modal = 'rating';
+      state.modalData = { purchaseId: el.dataset.rate, score: 7 };
+      render();
+    };
+  });
+
   // toggle nieobecny
   document.querySelectorAll('[data-toggle-here]').forEach(el => {
-    el.onchange = (e) => {
-      const id = el.dataset.toggleHere;
-      const m = memberById(id);
-      m.todayOff = !e.target.checked;
-      render();
-      // TODO: zapis do GitHub
-    };
+    el.onchange = (e) => togglePresence(el.dataset.toggleHere, !e.target.checked);
   });
 }
 
-/* ---------- 11. LOSOWANIE — animacja ---------- */
-function startDraw() {
+/* ---------- 12. AKCJE ZAPISU ---------- */
+
+async function startDraw() {
   const players = inGame();
   if (players.length === 0) return;
 
-  // wybieramy zwycięzcę losowo (czysty random, fair)
   const winner = players[Math.floor(Math.random() * players.length)];
   state.draw.winner = winner.id;
   state.draw.stage = 'reel';
   render();
 
-  // animacja przewijania imion (~3.5s)
   setTimeout(() => animateReel(winner), 50);
+
+  // zapisz draw do Supabase
+  try {
+    const drawId = 'd' + uid();
+    const today = new Date().toISOString().slice(0, 10);
+    await sb.post('draws', {
+      id: drawId,
+      round_number: state.data.currentRound,
+      member_id: winner.id,
+      draw_date: today,
+    });
+    // dodaj lokalnie (bez reloadu, żeby nie przerywać animacji)
+    const currentRoundObj = state.data.rounds.find(r => r.number === state.data.currentRound);
+    if (currentRoundObj) {
+      currentRoundObj.draws.unshift({ id: drawId, memberId: winner.id, date: today });
+    }
+    state.draw.savedDrawId = drawId;
+  } catch (err) {
+    console.error('Błąd zapisu losowania:', err);
+  }
 }
 
+async function savePurchase() {
+  const brand   = $('#f-brand')?.value?.trim();
+  const variety = $('#f-variety')?.value?.trim();
+  const price   = parseInt($('#f-price')?.value);
+  const fileInput = $('#f-photo');
+  const file    = fileInput?.files?.[0];
+  const drawId  = state.modalData.drawId;
+
+  if (!brand || !variety || !price || !drawId) {
+    alert('Uzupełnij markę, odmianę i cenę.');
+    return;
+  }
+
+  state.saving = true;
+  render();
+
+  try {
+    let photoUrl = null;
+
+    if (file) {
+      const ext = file.name.split('.').pop();
+      const path = `${drawId}_${uid()}.${ext}`;
+      photoUrl = await sb.uploadPhoto(file, path);
+    }
+
+    const purchaseId = 'p' + uid();
+    await sb.post('purchases', {
+      id: purchaseId,
+      draw_id: drawId,
+      brand,
+      variety,
+      price,
+      photo_url: photoUrl,
+    });
+
+    // dodaj lokalnie
+    state.data.purchases.push({ id: purchaseId, drawId, brand, variety, price, photo: photoUrl });
+
+    state.modal = null;
+    state.modalData = {};
+    state.saving = false;
+    state.draw = { stage: 'idle', winner: null, gifUrl: null };
+    state.tab = 'ranking';
+    render();
+  } catch (err) {
+    console.error('Błąd zapisu zakupu:', err);
+    state.saving = false;
+    alert('Błąd zapisu: ' + err.message);
+    render();
+  }
+}
+
+async function saveRating() {
+  const purchaseId = state.modalData.purchaseId;
+  const score      = state.modalData.score;
+
+  if (!purchaseId || !score) return;
+
+  state.saving = true;
+  render();
+
+  try {
+    await sb.post('ratings', {
+      purchase_id: purchaseId,
+      member_id: state.whoAmI,
+      score,
+    });
+
+    // dodaj lokalnie
+    state.data.ratings.push({ purchaseId, memberId: state.whoAmI, score });
+
+    state.modal = null;
+    state.modalData = {};
+    state.saving = false;
+    render();
+  } catch (err) {
+    console.error('Błąd zapisu oceny:', err);
+    state.saving = false;
+    alert('Błąd zapisu: ' + err.message);
+    render();
+  }
+}
+
+async function togglePresence(memberId, isOff) {
+  const member = memberById(memberId);
+  if (!member) return;
+
+  // optymistyczna aktualizacja UI
+  member.today_off = isOff;
+  render();
+
+  try {
+    await sb.patch('team', `id=eq.${memberId}`, { today_off: isOff });
+  } catch (err) {
+    console.error('Błąd zapisu obecności:', err);
+    // cofnij
+    member.today_off = !isOff;
+    render();
+  }
+}
+
+/* ---------- 13. ANIMACJA LOSOWANIA ---------- */
 function animateReel(winner) {
   const track = $('#reel-track');
   if (!track) return;
@@ -552,21 +918,15 @@ function animateReel(winner) {
   const items = track.querySelectorAll('.reel-name');
   if (items.length === 0) return;
 
-  // szerokość jednego elementu + gap
-  const itemWidth = 60 + items[0].offsetWidth; // gap + szerokość
-
-  // znajdź index zwycięzcy w środkowej trzeciej części tracka
-  // (lista jest skopiowana 5 razy, używamy 3-go bloku)
+  const itemWidth = 60 + items[0].offsetWidth;
   const players = inGame();
   const winnerIdx = players.findIndex(p => p.id === winner.id);
-  const targetIdx = players.length * 2 + winnerIdx; // 3-ci blok
+  const targetIdx = players.length * 2 + winnerIdx;
 
-  // chcemy żeby winner trafił na środek (pointer)
   const reel = track.parentElement;
   const reelCenter = reel.offsetWidth / 2;
   const targetX = (targetIdx * itemWidth) + items[0].offsetWidth / 2 - reelCenter;
 
-  // animacja przez 3.5s z easing-out
   let start = null;
   const duration = 3500;
 
@@ -574,12 +934,10 @@ function animateReel(winner) {
     if (!start) start = timestamp;
     const elapsed = timestamp - start;
     const progress = Math.min(elapsed / duration, 1);
-    // ease-out cubic
     const eased = 1 - Math.pow(1 - progress, 3);
     const x = -targetX * eased;
     track.style.transform = `translateX(${x}px)`;
 
-    // podświetl element pod pointerem
     items.forEach((el, i) => {
       const elCenter = (i * itemWidth) + items[0].offsetWidth / 2 + x;
       const dist = Math.abs(elCenter - reelCenter);
@@ -592,7 +950,6 @@ function animateReel(winner) {
     if (progress < 1) {
       requestAnimationFrame(tick);
     } else {
-      // koniec animacji → wynik
       setTimeout(() => {
         state.draw.stage = 'wynik';
         render();
@@ -604,36 +961,32 @@ function animateReel(winner) {
   requestAnimationFrame(tick);
 }
 
-/* ---------- 12. GIPHY ---------- */
+/* ---------- 14. GIPHY ---------- */
 async function loadGif() {
   const slot = $('#gif-slot');
   if (!slot) return;
-  // klucz publiczny demo-grade — w produkcji wstaw własny
-  const KEY = 'dc6zaTOxFJmzC'; // public beta key (giphy api)
+  const KEY = 'dc6zaTOxFJmzC';
   const tags = ['coffee', 'celebration', 'drama', 'wow'];
   const tag = tags[Math.floor(Math.random() * tags.length)];
   try {
     const res = await fetch(`https://api.giphy.com/v1/gifs/random?api_key=${KEY}&tag=${tag}&rating=g`);
     const json = await res.json();
     const url = json.data?.images?.fixed_height?.url;
-    if (url) {
-      slot.innerHTML = `<img src="${url}" alt="mem"/>`;
-    } else {
-      slot.innerHTML = '<span class="mono">brak gifa 😅</span>';
-    }
-  } catch (e) {
+    if (url) slot.innerHTML = `<img src="${url}" alt="mem"/>`;
+    else slot.innerHTML = '<span class="mono">brak gifa 😅</span>';
+  } catch {
     slot.innerHTML = '<span class="mono">giphy offline</span>';
   }
 }
 
-/* ---------- 13. KONFETTI ---------- */
+/* ---------- 15. KONFETTI ---------- */
 function spawnConfetti() {
   const stage = $('#result-stage');
   if (!stage) return;
   const colors = ['#8b5a2b','#c9a55b','#e9d8b8','#6b3e1a','#b54b3a'];
   for (let i = 0; i < 30; i++) {
     const c = document.createElement('div');
-    c.className = 'confetti';
+    c.className = 'style.confetti';
     c.style.left = Math.random() * 100 + '%';
     c.style.background = colors[Math.floor(Math.random() * colors.length)];
     c.style.animationDelay = Math.random() * 0.6 + 's';
@@ -643,8 +996,18 @@ function spawnConfetti() {
   }
 }
 
-/* ---------- 14. START ---------- */
+/* ---------- 16. START ---------- */
 (async function init() {
-  await loadData();
-  render();
+  try {
+    await loadData();
+    render();
+  } catch (err) {
+    $('#app').innerHTML = `
+      <div style="padding:60px; text-align:center; color:var(--ink-soft)">
+        <div style="font-size:32px; margin-bottom:12px">☕</div>
+        <div class="mono">błąd ładowania danych</div>
+        <div style="font-size:12px; margin-top:8px; color:var(--ink-soft)">${err.message}</div>
+      </div>
+    `;
+  }
 })();
