@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 240" width="720" height="240">
+  <title>Kawa prawem, nie towarem — lockup poziom</title>
+  
+  <g transform="translate(28 22) scale(0.95)">
+  <path d="M70 50 Q60 40 70 30 Q80 20 70 10" stroke="#c0623d" stroke-width="6" fill="none" stroke-linecap="round"></path>
+  <path d="M100 50 Q90 40 100 30 Q110 20 100 10" stroke="#c0623d" stroke-width="6" fill="none" stroke-linecap="round"></path>
+  <path d="M130 50 Q120 40 130 30 Q140 20 130 10" stroke="#c0623d" stroke-width="6" fill="none" stroke-linecap="round"></path>
+  <rect x="40" y="70" width="120" height="90" rx="14" fill="#3a241a"></rect>
+  <path d="M160 92 Q192 92 192 115 Q192 138 160 138" fill="none" stroke="#3a241a" stroke-width="10" stroke-linecap="round"></path>
+  <text x="100" y="138" text-anchor="middle" font-family="Inter,&#39;Helvetica Neue&#39;,Arial,sans-serif" font-weight="800" font-size="64" letter-spacing="-3" fill="#f5ead7">?</text></g>
+  <text x="260" y="90" font-family="Inter,&#39;Helvetica Neue&#39;,Arial,sans-serif" font-weight="800" font-size="48" letter-spacing="-1.4" fill="#3a241a">Kawa</text>
+  <text x="260" y="142" font-family="Inter,&#39;Helvetica Neue&#39;,Arial,sans-serif" font-weight="800" font-size="48" letter-spacing="-1.4" fill="#3a241a">prawem<tspan fill="#c0623d">,</tspan></text>
+  <text x="260" y="194" font-family="Inter,&#39;Helvetica Neue&#39;,Arial,sans-serif" font-weight="800" font-size="48" letter-spacing="-1.4" fill="#c0623d">nie towarem.</text>
+</svg>

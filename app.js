@@ -108,6 +108,7 @@ const byId = (list, id) => list.find(x => x.id === id);
 const memberById = (id) => byId(state.data.team, id);
 const initials = (name) => name.slice(0, 2).toUpperCase();
 const uid = () => Math.random().toString(36).slice(2, 10);
+const buyVerb = (member) => member?.gender === 'M' ? 'kupił' : 'kupiła';
 
 function paidThisRound() {
   const round = state.data.rounds.find(r => r.number === state.data.currentRound);
@@ -173,8 +174,7 @@ function render() {
 function renderWhoAmI() {
   return `
     <div class="whoami-screen">
-      <div class="brand-logo" style="font-size:48px; margin-bottom:12px">☕</div>
-      <h1 style="margin-bottom:4px">Kawa prawem, nie towarem</h1>
+      <img src="lockup-poziom-6a.svg" alt="Kawa prawem, nie towarem" style="width:360px; margin-bottom:20px">
       <div class="mono" style="margin-bottom:32px; color:var(--ink-soft)">zaloguj się</div>
       <div class="whoami-list">
         ${state.data.team.filter(p => p.active).map(p => `
@@ -193,11 +193,8 @@ function renderTopbar() {
   return `
     <div class="topbar">
       <div class="brand">
-        <div class="brand-logo">☕</div>
-        <div class="brand-text">
-          <h1>Kawa prawem, nie towarem</h1>
-          <div class="subtitle">runda ${state.data.currentRound} · ${inGame().length} z ${state.data.team.filter(p => p.active).length} w grze</div>
-        </div>
+        <img src="lockup-poziom-6a.svg" alt="Kawa prawem, nie towarem" style="height:70px">
+        <div class="subtitle">runda ${state.data.currentRound} · ${inGame().length} z ${state.data.team.filter(p => p.active).length} w grze</div>
       </div>
       <div class="who-am-i">
         <span class="label">kawosz:</span>
@@ -258,13 +255,17 @@ function renderDrawIdle() {
   return `
     <div class="draw-stage">
       <div class="draw-main">
-        <div class="draw-headline">Koło <em>kawowego</em> losu</div>
         <button class="btn-draw" id="btn-draw" ${canDraw ? '' : 'disabled'}>
           LOSUJ
         </button>
         <div class="draw-hint">
           ${canDraw ? '' : 'Runda zakończona'}
         </div>
+        ${!canDraw ? `
+          <button class="btn btn-primary" id="btn-new-round" style="margin-top:16px">
+            ↻ Nowa runda (${state.data.currentRound + 1})
+          </button>
+        ` : ''}
       </div>
 
       <div class="round-info">
@@ -315,7 +316,7 @@ function renderDrawIdle() {
               ${initials(lastMember.name)}
             </div>
             <div class="info">
-              <div class="who">${lastMember.name} kupiła</div>
+              <div class="who">${lastMember.name} ${buyVerb(lastMember)}</div>
               <div style="font-size:13px; color:var(--ink-2)">
                 ${lastPurchase.brand} · ${lastPurchase.variety} · ${lastPurchase.price} zł
               </div>
@@ -497,7 +498,7 @@ function renderStatystyki() {
         <div class="sub">/ 10</div>
       </div>
       <div class="kpi accent">
-        <div class="label">filiżanki ☕</div>
+        <div class="label">filiżanki</div>
         <div class="value">${cups}</div>
         <div class="sub">~${cupsPerKg} espresso / 1kg</div>
       </div>
@@ -532,16 +533,23 @@ function renderRanking() {
   // zakupy bez ocen — można ocenić
   const unrated = state.data.purchases.filter(p => {
     const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
-    if (!draw) return false;
-    const isMine = draw.memberId === state.whoAmI;
+    const isMine = draw?.memberId === state.whoAmI;
     const alreadyRated = myRatingForPurchase(p.id);
     return !isMine && !alreadyRated;
   });
 
+  // przycisk rejestracji: aktywny tylko dla wylosowanych w bieżącej rundzie bez zakupu
+  const currentRound = state.data.rounds.find(r => r.number === state.data.currentRound);
+  const myDrawInCurrentRound = currentRound?.draws.find(d => d.memberId === state.whoAmI);
+  const canRegister = myDrawInCurrentRound && !purchaseForDraw(myDrawInCurrentRound.id);
+
   return `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
       <h2>Ranking</h2>
-      <button class="btn btn-primary" id="btn-open-register">+ zarejestruj zakup</button>
+      <button class="btn ${canRegister ? 'btn-primary' : 'btn-primary-disabled'}" id="btn-open-register"
+        title="${canRegister ? '' : 'Rejestracja zakupu dostępna tylko dla wylosowanych uczestników w bieżącej rundzie'}">
+        + zarejestruj zakup
+      </button>
     </div>
     <div class="mono" style="margin-bottom:20px">
       kupiona po losowaniu · oceniana przez zespół (1-10) · zdjęcie opakowania obowiązkowe
@@ -701,6 +709,16 @@ function renderModalAddMember() {
           <label class="field-label">Imię</label>
           <input class="field-input" id="f-member-name" placeholder="np. Zosia" autocomplete="off" />
 
+          <label class="field-label">Płeć</label>
+          <div style="display:flex; gap:8px; margin-bottom:12px">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer">
+              <input type="radio" name="f-gender" value="K" checked /> Kobieta
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer">
+              <input type="radio" name="f-gender" value="M" /> Mężczyzna
+            </label>
+          </div>
+
           <label class="field-label">Ulubiona kawa</label>
           <input class="field-input" id="f-member-drink" placeholder="np. flat white, espresso..." />
 
@@ -766,12 +784,11 @@ function attachEvents() {
   // zarejestruj zakup (z rankingu)
   const btnOpenRegister = $('#btn-open-register');
   if (btnOpenRegister) btnOpenRegister.onclick = () => {
-    // znajdź draw bieżącego użytkownika bez zakupu
-    const myDraw = state.data.rounds
-      .flatMap(r => r.draws)
-      .find(d => d.memberId === state.whoAmI && !purchaseForDraw(d.id));
+    const cr = state.data.rounds.find(r => r.number === state.data.currentRound);
+    const myDraw = cr?.draws.find(d => d.memberId === state.whoAmI && !purchaseForDraw(d.id));
+    if (!myDraw) return;
     state.modal = 'purchase';
-    state.modalData = { drawId: myDraw?.id };
+    state.modalData = { drawId: myDraw.id };
     render();
   };
 
@@ -836,6 +853,10 @@ function attachEvents() {
   // dodaj uczestnika — zapisz
   const btnSaveMember = $('#btn-save-member');
   if (btnSaveMember) btnSaveMember.onclick = saveNewMember;
+
+  // nowa runda
+  const btnNewRound = $('#btn-new-round');
+  if (btnNewRound) btnNewRound.onclick = startNewRound;
 }
 
 /* ---------- 12. AKCJE ZAPISU ---------- */
@@ -855,20 +876,22 @@ async function startDraw() {
   try {
     const drawId = 'd' + uid();
     const today = new Date().toISOString().slice(0, 10);
-    await sb.post('draws', {
+    const savedDraw = await sb.post('draws', {
       id: drawId,
       round_number: state.data.currentRound,
       member_id: winner.id,
       draw_date: today,
     });
+    // użyj ID z bazy (może się różnić od lokalnie wygenerowanego)
+    const actualDrawId = (Array.isArray(savedDraw) ? savedDraw[0] : savedDraw)?.id ?? drawId;
     // dodaj lokalnie (bez reloadu, żeby nie przerywać animacji)
     let currentRoundObj = state.data.rounds.find(r => r.number === state.data.currentRound);
     if (!currentRoundObj) {
       currentRoundObj = { number: state.data.currentRound, draws: [] };
       state.data.rounds.unshift(currentRoundObj);
     }
-    currentRoundObj.draws.unshift({ id: drawId, memberId: winner.id, date: today });
-    state.draw.savedDrawId = drawId;
+    currentRoundObj.draws.unshift({ id: actualDrawId, memberId: winner.id, date: today });
+    state.draw.savedDrawId = actualDrawId;
   } catch (err) {
     console.error('Błąd zapisu losowania:', err);
   }
@@ -958,8 +981,9 @@ async function saveRating() {
 }
 
 async function saveNewMember() {
-  const name  = $('#f-member-name')?.value?.trim();
-  const drink = $('#f-member-drink')?.value?.trim() || 'kawa';
+  const name   = $('#f-member-name')?.value?.trim();
+  const drink  = $('#f-member-drink')?.value?.trim() || 'kawa';
+  const gender = document.querySelector('input[name="f-gender"]:checked')?.value || 'K';
 
   if (!name) {
     alert('Wpisz imię uczestnika.');
@@ -981,12 +1005,13 @@ async function saveNewMember() {
       id: memberId,
       name,
       drink,
+      gender,
       active: true,
       today_off: false,
     });
 
     // dodaj lokalnie
-    state.data.team.push({ id: memberId, name, drink, active: true, today_off: false });
+    state.data.team.push({ id: memberId, name, drink, gender, active: true, today_off: false });
     state.data.team.sort((a, b) => a.name.localeCompare(b.name));
 
     state.modal = null;
@@ -1016,6 +1041,24 @@ async function deactivateMember(memberId) {
     console.error('Błąd dezaktywacji:', err);
     member.active = true;
     render();
+    alert('Błąd: ' + err.message);
+  }
+}
+
+async function startNewRound() {
+  const newNumber = state.data.currentRound + 1;
+  if (!confirm(`Rozpocząć rundę ${newNumber}? Wszyscy wracają do losowania.`)) return;
+
+  try {
+    await sb.patch('rounds', 'is_current=eq.true', { is_current: false });
+    await sb.post('rounds', { number: newNumber, is_current: true });
+
+    state.data.rounds.unshift({ number: newNumber, draws: [] });
+    state.data.currentRound = newNumber;
+    state.draw = { stage: 'idle', winner: null, gifUrl: null };
+    render();
+  } catch (err) {
+    console.error('Błąd tworzenia nowej rundy:', err);
     alert('Błąd: ' + err.message);
   }
 }
@@ -1132,7 +1175,6 @@ function spawnConfetti() {
   } catch (err) {
     $('#app').innerHTML = `
       <div style="padding:60px; text-align:center; color:var(--ink-soft)">
-        <div style="font-size:32px; margin-bottom:12px">☕</div>
         <div class="mono">błąd ładowania danych</div>
         <div style="font-size:12px; margin-top:8px; color:var(--ink-soft)">${err.message}</div>
       </div>
