@@ -73,13 +73,20 @@ async function loadData() {
     sb.get('ratings', 'order=id'),
   ]);
 
-  const currentRound = rounds.find(r => r.is_current);
+  // Jeśli brak rund w bazie — utwórz rundę 1 jako bieżącą
+  let activeRounds = rounds;
+  if (activeRounds.length === 0) {
+    const created = await sb.post('rounds', { number: 1, is_current: true });
+    activeRounds = Array.isArray(created) ? created : [created];
+  }
+
+  const currentRound = activeRounds.find(r => r.is_current);
 
   // normalizujemy do struktury podobnej do data.json
   state.data = {
     team,
     currentRound: currentRound?.number ?? 1,
-    rounds: rounds.map(r => ({
+    rounds: activeRounds.map(r => ({
       number: r.number,
       draws: draws
         .filter(d => d.round_number === r.number)
@@ -537,7 +544,7 @@ function renderRanking() {
       <button class="btn btn-primary" id="btn-open-register">+ zarejestruj zakup</button>
     </div>
     <div class="mono" style="margin-bottom:20px">
-      kupiona po losowaniu · oceniana przez zespół (1-10) · zdjęcie torebki obowiązkowe
+      kupiona po losowaniu · oceniana przez zespół (1-10) · zdjęcie opakowania obowiązkowe
     </div>
 
     ${unrated.length > 0 ? `
@@ -855,10 +862,12 @@ async function startDraw() {
       draw_date: today,
     });
     // dodaj lokalnie (bez reloadu, żeby nie przerywać animacji)
-    const currentRoundObj = state.data.rounds.find(r => r.number === state.data.currentRound);
-    if (currentRoundObj) {
-      currentRoundObj.draws.unshift({ id: drawId, memberId: winner.id, date: today });
+    let currentRoundObj = state.data.rounds.find(r => r.number === state.data.currentRound);
+    if (!currentRoundObj) {
+      currentRoundObj = { number: state.data.currentRound, draws: [] };
+      state.data.rounds.unshift(currentRoundObj);
     }
+    currentRoundObj.draws.unshift({ id: drawId, memberId: winner.id, date: today });
     state.draw.savedDrawId = drawId;
   } catch (err) {
     console.error('Błąd zapisu losowania:', err);
