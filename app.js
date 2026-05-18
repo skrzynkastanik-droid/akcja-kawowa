@@ -110,6 +110,13 @@ const initials = (name) => name.slice(0, 2).toUpperCase();
 const uid = () => Math.random().toString(36).slice(2, 10);
 const buyVerb = (member) => member?.gender === 'M' ? 'kupił' : 'kupiła';
 
+function daysAgo(dateStr) {
+  const diff = Math.floor((Date.now() - new Date(dateStr)) / 86400000);
+  if (diff === 0) return 'dziś';
+  if (diff === 1) return '1 dzień temu';
+  return `${diff} dni temu`;
+}
+
 function paidThisRound() {
   const round = state.data.rounds.find(r => r.number === state.data.currentRound);
   if (!round) return [];
@@ -250,25 +257,74 @@ function renderDrawIdle() {
   const last = state.data.rounds[0]?.draws[0];
   const lastMember = last ? memberById(last.memberId) : null;
   const lastPurchase = last ? purchaseForDraw(last.id) : null;
-  const canDraw = players.length > 0;
+  const lastDrawHasPurchase = last ? !!lastPurchase : true;
+  const roundDone = players.length === 0;
+  const canDraw = players.length > 0 && lastDrawHasPurchase;
+  const canNewRound = roundDone && lastDrawHasPurchase;
+
+  const currentRoundObj = state.data.rounds.find(r => r.number === state.data.currentRound);
+  const myDraw = currentRoundObj?.draws.find(d => d.memberId === state.whoAmI);
+  const myPurchase = myDraw ? purchaseForDraw(myDraw.id) : null;
+  const isMyTurn = !!(myDraw && !myPurchase);
+  const daysSinceDrawn = myDraw ? Math.floor((Date.now() - new Date(myDraw.date)) / 86400000) : 0;
+  const remaining = Math.max(0, 7 - daysSinceDrawn);
+  const calUrl = myDraw ? (() => {
+    const d = new Date(new Date(myDraw.date).getTime() + 7 * 86400000);
+    const fmt = (dt) => dt.toISOString().slice(0,10).replace(/-/g,'');
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=Kup+kawę+dla+zespołu&dates=${fmt(d)}%2F${fmt(d)}&details=Akcja+Kawowa+runda+${state.data.currentRound}&sf=true&output=xml`;
+  })() : '#';
 
   return `
     <div class="draw-stage">
       <div class="draw-main">
-        <button class="btn-draw" id="btn-draw" ${canDraw ? '' : 'disabled'}>
-          LOSUJ
-        </button>
-        <div class="draw-hint">
-          ${canDraw ? '' : 'Runda zakończona'}
-        </div>
-        ${!canDraw ? `
-          <button class="btn btn-primary" id="btn-new-round" style="margin-top:16px">
-            ↻ Nowa runda (${state.data.currentRound + 1})
-          </button>
+        ${isMyTurn ? `
+          <div class="my-turn-card">
+            <div class="mono" style="color:var(--coffee); margin-bottom:14px">twoja kolej · runda ${state.data.currentRound}</div>
+            <div class="my-turn-headline">${memberById(state.whoAmI)?.name}!</div>
+            <div class="my-turn-sub">wylosowano Cię ${daysAgo(myDraw.date)}${remaining > 0 ? ` · zostało Ci ${remaining} ${remaining === 1 ? 'dzień' : 'dni'}` : ''}</div>
+            <button class="btn btn-primary my-turn-btn" id="btn-my-turn-register">📷 zarejestruj zakup</button>
+                      <div class="my-turn-footer mono">kolejne losowanie odblokuje się po zarejestrowaniu zakupu</div>
+          </div>
+        ` : canDraw
+          ? `<button class="btn-draw" id="btn-draw">LOSUJ</button>`
+          : `<span class="tooltip-wrap" data-tooltip="${roundDone ? 'Runda zakończona. Wszyscy wylosowani' : 'Zarejestruj zakup przed kolejnym losowaniem'}">
+               <button class="btn-draw" id="btn-draw" disabled>LOSUJ</button>
+             </span>`
+        }
+        ${!isMyTurn ? `
+          <div class="draw-hint">
+            ${roundDone ? 'Runda zakończona' : !lastDrawHasPurchase ? 'zarejestruj zakup przed kolejnym losowaniem' : ''}
+          </div>
+          ${roundDone ? `
+            ${canNewRound
+              ? `<button class="btn btn-primary" id="btn-new-round" style="margin-top:16px">↻ Nowa runda (${state.data.currentRound + 1})</button>`
+              : `<span class="tooltip-wrap" data-tooltip="Zarejestruj zakup przed nową rundą" style="display:inline-block; margin-top:16px">
+                   <button class="btn btn-primary" id="btn-new-round" disabled>↻ Nowa runda (${state.data.currentRound + 1})</button>
+                 </span>`
+            }
+          ` : ''}
         ` : ''}
       </div>
 
       <div class="round-info">
+        ${last && lastMember ? `
+          <div class="last-drawn-card">
+            <div class="mono" style="margin-bottom:12px">↩ ostatnio wylosowany</div>
+            <div class="last-drawn-body">
+              <div class="avatar avatar-lg" style="background: var(--coffee); color: var(--paper);">${initials(lastMember.name)}</div>
+              <div class="last-drawn-info">
+                <div class="last-drawn-name">${lastMember.name}</div>
+                <div class="last-drawn-meta">
+                  <span class="chip mono">${daysAgo(last.date)}</span>
+                  ${!lastPurchase
+                    ? `<span class="chip mono" style="color:var(--coffee-2); border-color:var(--gold)">czekamy na rejestrację</span>`
+                    : `<span class="chip mono" style="color:var(--ink-soft)">zakup zarejestrowany</span>`}
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
         <div class="card">
           <h3>W grze w tej rundzie <span class="mono">(${players.length})</span></h3>
           <div class="member-list">
@@ -285,13 +341,31 @@ function renderDrawIdle() {
             <hr class="divider"/>
             <h3>Wylosowani w tej rundzie <span class="mono">(${out().length})</span></h3>
             <div class="member-list">
-              ${out().map(p => `
-                <div class="member-row is-out">
-                  <div class="avatar">${initials(p.name)}</div>
-                  <span class="name">${p.name}</span>
-                  <span class="badge badge-out">wylosowany</span>
-                </div>
-              `).join('')}
+              ${(() => {
+                const currentRoundObj = state.data.rounds.find(r => r.number === state.data.currentRound);
+                return out().map(p => {
+                  const draw = currentRoundObj?.draws.find(d => d.memberId === p.id);
+                  const purchase = draw ? purchaseForDraw(draw.id) : null;
+                  return `
+                    <div class="member-row drawn-row">
+                      <div class="drawn-thumb">
+                        ${purchase?.photo
+                          ? `<img src="${purchase.photo}" alt="kawa"/>`
+                          : `<span>${initials(p.name)}</span>`
+                        }
+                      </div>
+                      <div class="drawn-info">
+                        <div style="font-weight:500">${p.name}</div>
+                        ${purchase
+                          ? `<div class="mono">${purchase.brand} · ${purchase.variety}</div>`
+                          : `<div class="mono" style="color:var(--gold)">czekamy na rejestrację</div>`
+                        }
+                      </div>
+                      <span class="badge badge-out">wylosowany</span>
+                    </div>
+                  `;
+                }).join('');
+              })()}
             </div>
           ` : ''}
 
@@ -310,19 +384,6 @@ function renderDrawIdle() {
           ` : ''}
         </div>
 
-        ${lastMember && lastPurchase ? `
-          <div class="last-result">
-            <div class="avatar avatar-lg" style="background: var(--coffee); color: var(--paper);">
-              ${initials(lastMember.name)}
-            </div>
-            <div class="info">
-              <div class="who">${lastMember.name} ${buyVerb(lastMember)}</div>
-              <div style="font-size:13px; color:var(--ink-2)">
-                ${lastPurchase.brand} · ${lastPurchase.variety} · ${lastPurchase.price} zł
-              </div>
-            </div>
-          </div>
-        ` : ''}
       </div>
     </div>
   `;
@@ -359,16 +420,10 @@ function renderDrawResult() {
         ${initials(winner.name)}
       </div>
       <div class="result-name">${winner.name}!</div>
-      <div class="result-tagline">kupujesz 1kg kawy ziarnistej</div>
-      <div class="result-meta">
-        <span class="chip">📅 do końca tygodnia</span>
-        <span class="chip">📷 zdjęcie opakowania obowiązkowe</span>
-      </div>
       <div class="result-gif" id="gif-slot">
         <span class="mono">ładuję mem...</span>
       </div>
       <div class="result-actions">
-        <button class="btn btn-primary" id="btn-register">📷 zarejestruj zakup</button>
         <button class="btn btn-ghost" id="btn-back">← powrót</button>
       </div>
     </div>
@@ -436,7 +491,7 @@ function renderHistoria() {
       return `
         <div class="history-section">
           <div class="label">runda ${round.number} ${completed ? '(zakończona)' : '— bieżąca'} · ${round.draws.length} losowań</div>
-          ${round.draws.map(d => {
+          ${[...round.draws].sort((a, b) => new Date(b.date) - new Date(a.date) || b.id.localeCompare(a.id)).map(d => {
             const m = memberById(d.memberId);
             const p = purchaseForDraw(d.id);
             const score = p ? avgScore(p.id) : null;
@@ -552,7 +607,7 @@ function renderRanking() {
       </button>
     </div>
     <div class="mono" style="margin-bottom:20px">
-      kupiona po losowaniu · oceniana przez zespół (1-10) · zdjęcie opakowania obowiązkowe
+      kawa kupowana po losowaniu · oceniana przez zespół (1-10) · zdjęcie opakowania obowiązkowe
     </div>
 
     ${unrated.length > 0 ? `
@@ -767,6 +822,17 @@ function attachEvents() {
   const btnBack = $('#btn-back');
   if (btnBack) btnBack.onclick = () => {
     state.draw = { stage: 'idle', winner: null, gifUrl: null };
+    render();
+  };
+
+  // zarejestruj zakup (karta "twoja kolej")
+  const btnMyTurnRegister = $('#btn-my-turn-register');
+  if (btnMyTurnRegister) btnMyTurnRegister.onclick = () => {
+    const cr = state.data.rounds.find(r => r.number === state.data.currentRound);
+    const myDraw = cr?.draws.find(d => d.memberId === state.whoAmI);
+    if (!myDraw) return;
+    state.modal = 'purchase';
+    state.modalData = { drawId: myDraw.id };
     render();
   };
 
