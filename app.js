@@ -73,13 +73,20 @@ async function loadData() {
     sb.get('ratings', 'order=id'),
   ]);
 
-  const currentRound = rounds.find(r => r.is_current);
+  // Jeśli brak rund w bazie — utwórz rundę 1 jako bieżącą
+  let activeRounds = rounds;
+  if (activeRounds.length === 0) {
+    const created = await sb.post('rounds', { number: 1, is_current: true });
+    activeRounds = Array.isArray(created) ? created : [created];
+  }
+
+  const currentRound = activeRounds.find(r => r.is_current);
 
   // normalizujemy do struktury podobnej do data.json
   state.data = {
     team,
     currentRound: currentRound?.number ?? 1,
-    rounds: rounds.map(r => ({
+    rounds: activeRounds.map(r => ({
       number: r.number,
       draws: draws
         .filter(d => d.round_number === r.number)
@@ -101,6 +108,14 @@ const byId = (list, id) => list.find(x => x.id === id);
 const memberById = (id) => byId(state.data.team, id);
 const initials = (name) => name.slice(0, 2).toUpperCase();
 const uid = () => Math.random().toString(36).slice(2, 10);
+const buyVerb = (member) => member?.gender === 'M' ? 'kupił' : 'kupiła';
+
+function daysAgo(dateStr) {
+  const diff = Math.floor((Date.now() - new Date(dateStr)) / 86400000);
+  if (diff === 0) return 'dziś';
+  if (diff === 1) return '1 dzień temu';
+  return `${diff} dni temu`;
+}
 
 function paidThisRound() {
   const round = state.data.rounds.find(r => r.number === state.data.currentRound);
@@ -166,9 +181,8 @@ function render() {
 function renderWhoAmI() {
   return `
     <div class="whoami-screen">
-      <div class="brand-logo" style="font-size:48px; margin-bottom:12px">☕</div>
-      <h1 style="margin-bottom:4px">Kawa prawem, nie towarem</h1>
-      <div class="mono" style="margin-bottom:32px; color:var(--ink-soft)">kim jesteś?</div>
+      <img src="lockup-poziom-6a.svg" alt="Kawa prawem, nie towarem" style="width:360px; margin-bottom:20px">
+      <div class="mono" style="margin-bottom:32px; color:var(--ink-soft)">zaloguj się</div>
       <div class="whoami-list">
         ${state.data.team.filter(p => p.active).map(p => `
           <button class="whoami-btn" data-who="${p.id}">
@@ -186,11 +200,8 @@ function renderTopbar() {
   return `
     <div class="topbar">
       <div class="brand">
-        <div class="brand-logo">☕</div>
-        <div class="brand-text">
-          <h1>Kawa prawem, nie towarem</h1>
-          <div class="subtitle">runda ${state.data.currentRound} · ${inGame().length} z ${state.data.team.filter(p => p.active).length} w grze</div>
-        </div>
+        <img src="lockup-poziom-6a.svg" alt="Kawa prawem, nie towarem" style="height:70px">
+        <div class="subtitle">runda ${state.data.currentRound} · ${inGame().length} z ${state.data.team.filter(p => p.active).length} w grze</div>
       </div>
       <div class="who-am-i">
         <span class="label">kawosz:</span>
@@ -246,21 +257,74 @@ function renderDrawIdle() {
   const last = state.data.rounds[0]?.draws[0];
   const lastMember = last ? memberById(last.memberId) : null;
   const lastPurchase = last ? purchaseForDraw(last.id) : null;
-  const canDraw = players.length > 0;
+  const lastDrawHasPurchase = last ? !!lastPurchase : true;
+  const roundDone = players.length === 0;
+  const canDraw = players.length > 0 && lastDrawHasPurchase;
+  const canNewRound = roundDone && lastDrawHasPurchase;
+
+  const currentRoundObj = state.data.rounds.find(r => r.number === state.data.currentRound);
+  const myDraw = currentRoundObj?.draws.find(d => d.memberId === state.whoAmI);
+  const myPurchase = myDraw ? purchaseForDraw(myDraw.id) : null;
+  const isMyTurn = !!(myDraw && !myPurchase);
+  const daysSinceDrawn = myDraw ? Math.floor((Date.now() - new Date(myDraw.date)) / 86400000) : 0;
+  const remaining = Math.max(0, 7 - daysSinceDrawn);
+  const calUrl = myDraw ? (() => {
+    const d = new Date(new Date(myDraw.date).getTime() + 7 * 86400000);
+    const fmt = (dt) => dt.toISOString().slice(0,10).replace(/-/g,'');
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=Kup+kawę+dla+zespołu&dates=${fmt(d)}%2F${fmt(d)}&details=Akcja+Kawowa+runda+${state.data.currentRound}&sf=true&output=xml`;
+  })() : '#';
 
   return `
     <div class="draw-stage">
       <div class="draw-main">
-        <div class="draw-headline">Koło <em>kawowego</em> losu</div>
-        <button class="btn-draw" id="btn-draw" ${canDraw ? '' : 'disabled'}>
-          LOSUJ
-        </button>
-        <div class="draw-hint">
-          ${canDraw ? '' : 'Runda zakończona'}
-        </div>
+        ${isMyTurn ? `
+          <div class="my-turn-card">
+            <div class="mono" style="color:var(--coffee); margin-bottom:14px">twoja kolej · runda ${state.data.currentRound}</div>
+            <div class="my-turn-headline">${memberById(state.whoAmI)?.name}!</div>
+            <div class="my-turn-sub">wylosowano Cię ${daysAgo(myDraw.date)}${remaining > 0 ? ` · zostało Ci ${remaining} ${remaining === 1 ? 'dzień' : 'dni'}` : ''}</div>
+            <button class="btn btn-primary my-turn-btn" id="btn-my-turn-register">📷 zarejestruj zakup</button>
+                      <div class="my-turn-footer mono">kolejne losowanie odblokuje się po zarejestrowaniu zakupu</div>
+          </div>
+        ` : canDraw
+          ? `<button class="btn-draw" id="btn-draw">LOSUJ</button>`
+          : `<span class="tooltip-wrap" data-tooltip="${roundDone ? 'Runda zakończona. Wszyscy wylosowani' : 'Zarejestruj zakup przed kolejnym losowaniem'}">
+               <button class="btn-draw" id="btn-draw" disabled>LOSUJ</button>
+             </span>`
+        }
+        ${!isMyTurn ? `
+          <div class="draw-hint">
+            ${roundDone ? 'Runda zakończona' : !lastDrawHasPurchase ? 'zarejestruj zakup przed kolejnym losowaniem' : ''}
+          </div>
+          ${roundDone ? `
+            ${canNewRound
+              ? `<button class="btn btn-primary" id="btn-new-round" style="margin-top:16px">↻ Nowa runda (${state.data.currentRound + 1})</button>`
+              : `<span class="tooltip-wrap" data-tooltip="Zarejestruj zakup przed nową rundą" style="display:inline-block; margin-top:16px">
+                   <button class="btn btn-primary" id="btn-new-round" disabled>↻ Nowa runda (${state.data.currentRound + 1})</button>
+                 </span>`
+            }
+          ` : ''}
+        ` : ''}
       </div>
 
       <div class="round-info">
+        ${last && lastMember ? `
+          <div class="last-drawn-card">
+            <div class="mono" style="margin-bottom:12px">↩ ostatnio wylosowany</div>
+            <div class="last-drawn-body">
+              <div class="avatar avatar-lg" style="background: var(--coffee); color: var(--paper);">${initials(lastMember.name)}</div>
+              <div class="last-drawn-info">
+                <div class="last-drawn-name">${lastMember.name}</div>
+                <div class="last-drawn-meta">
+                  <span class="chip mono">${daysAgo(last.date)}</span>
+                  ${!lastPurchase
+                    ? `<span class="chip mono" style="color:var(--coffee-2); border-color:var(--gold)">czekamy na rejestrację</span>`
+                    : `<span class="chip mono" style="color:var(--ink-soft)">zakup zarejestrowany</span>`}
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
         <div class="card">
           <h3>W grze w tej rundzie <span class="mono">(${players.length})</span></h3>
           <div class="member-list">
@@ -277,13 +341,31 @@ function renderDrawIdle() {
             <hr class="divider"/>
             <h3>Wylosowani w tej rundzie <span class="mono">(${out().length})</span></h3>
             <div class="member-list">
-              ${out().map(p => `
-                <div class="member-row is-out">
-                  <div class="avatar">${initials(p.name)}</div>
-                  <span class="name">${p.name}</span>
-                  <span class="badge badge-out">wylosowany</span>
-                </div>
-              `).join('')}
+              ${(() => {
+                const currentRoundObj = state.data.rounds.find(r => r.number === state.data.currentRound);
+                return out().map(p => {
+                  const draw = currentRoundObj?.draws.find(d => d.memberId === p.id);
+                  const purchase = draw ? purchaseForDraw(draw.id) : null;
+                  return `
+                    <div class="member-row drawn-row">
+                      <div class="drawn-thumb">
+                        ${purchase?.photo
+                          ? `<img src="${purchase.photo}" alt="kawa"/>`
+                          : `<span>${initials(p.name)}</span>`
+                        }
+                      </div>
+                      <div class="drawn-info">
+                        <div style="font-weight:500">${p.name}</div>
+                        ${purchase
+                          ? `<div class="mono">${purchase.brand} · ${purchase.variety}</div>`
+                          : `<div class="mono" style="color:var(--gold)">czekamy na rejestrację</div>`
+                        }
+                      </div>
+                      <span class="badge badge-out">wylosowany</span>
+                    </div>
+                  `;
+                }).join('');
+              })()}
             </div>
           ` : ''}
 
@@ -302,19 +384,6 @@ function renderDrawIdle() {
           ` : ''}
         </div>
 
-        ${lastMember && lastPurchase ? `
-          <div class="last-result">
-            <div class="avatar avatar-lg" style="background: var(--coffee); color: var(--paper);">
-              ${initials(lastMember.name)}
-            </div>
-            <div class="info">
-              <div class="who">${lastMember.name} kupiła</div>
-              <div style="font-size:13px; color:var(--ink-2)">
-                ${lastPurchase.brand} · ${lastPurchase.variety} · ${lastPurchase.price} zł
-              </div>
-            </div>
-          </div>
-        ` : ''}
       </div>
     </div>
   `;
@@ -351,16 +420,10 @@ function renderDrawResult() {
         ${initials(winner.name)}
       </div>
       <div class="result-name">${winner.name}!</div>
-      <div class="result-tagline">kupujesz 1kg kawy ziarnistej</div>
-      <div class="result-meta">
-        <span class="chip">📅 do końca tygodnia</span>
-        <span class="chip">📷 zdjęcie torebki obowiązkowe</span>
-      </div>
       <div class="result-gif" id="gif-slot">
         <span class="mono">ładuję mem...</span>
       </div>
       <div class="result-actions">
-        <button class="btn btn-primary" id="btn-register">📷 zarejestruj zakup</button>
         <button class="btn btn-ghost" id="btn-back">← powrót</button>
       </div>
     </div>
@@ -428,7 +491,7 @@ function renderHistoria() {
       return `
         <div class="history-section">
           <div class="label">runda ${round.number} ${completed ? '(zakończona)' : '— bieżąca'} · ${round.draws.length} losowań</div>
-          ${round.draws.map(d => {
+          ${[...round.draws].sort((a, b) => new Date(b.date) - new Date(a.date) || b.id.localeCompare(a.id)).map(d => {
             const m = memberById(d.memberId);
             const p = purchaseForDraw(d.id);
             const score = p ? avgScore(p.id) : null;
@@ -490,7 +553,7 @@ function renderStatystyki() {
         <div class="sub">/ 10</div>
       </div>
       <div class="kpi accent">
-        <div class="label">filiżanki ☕</div>
+        <div class="label">filiżanki</div>
         <div class="value">${cups}</div>
         <div class="sub">~${cupsPerKg} espresso / 1kg</div>
       </div>
@@ -525,19 +588,26 @@ function renderRanking() {
   // zakupy bez ocen — można ocenić
   const unrated = state.data.purchases.filter(p => {
     const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
-    if (!draw) return false;
-    const isMine = draw.memberId === state.whoAmI;
+    const isMine = draw?.memberId === state.whoAmI;
     const alreadyRated = myRatingForPurchase(p.id);
     return !isMine && !alreadyRated;
   });
 
+  // przycisk rejestracji: aktywny tylko dla wylosowanych w bieżącej rundzie bez zakupu
+  const currentRound = state.data.rounds.find(r => r.number === state.data.currentRound);
+  const myDrawInCurrentRound = currentRound?.draws.find(d => d.memberId === state.whoAmI);
+  const canRegister = myDrawInCurrentRound && !purchaseForDraw(myDrawInCurrentRound.id);
+
   return `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
       <h2>Ranking</h2>
-      <button class="btn btn-primary" id="btn-open-register">+ zarejestruj zakup</button>
+      <button class="btn ${canRegister ? 'btn-primary' : 'btn-primary-disabled'}" id="btn-open-register"
+        title="${canRegister ? '' : 'Rejestracja zakupu dostępna tylko dla wylosowanych uczestników w bieżącej rundzie'}">
+        + zarejestruj zakup
+      </button>
     </div>
     <div class="mono" style="margin-bottom:20px">
-      kupiona po losowaniu · oceniana przez zespół (1-10) · zdjęcie torebki obowiązkowe
+      kawa kupowana po losowaniu · oceniana przez zespół (1-10) · zdjęcie opakowania obowiązkowe
     </div>
 
     ${unrated.length > 0 ? `
@@ -627,13 +697,13 @@ function renderModalPurchase() {
           <label class="field-label">Palarnia / marka</label>
           <input class="field-input" id="f-brand" placeholder="np. HAYB, La Pajura..." />
 
-          <label class="field-label">Odmiana / blend</label>
+          <label class="field-label">Odmiana</label>
           <input class="field-input" id="f-variety" placeholder="np. Etiopia Sidamo" />
 
           <label class="field-label">Cena (zł)</label>
           <input class="field-input" id="f-price" type="number" placeholder="np. 79" />
 
-          <label class="field-label">Zdjęcie torebki</label>
+          <label class="field-label">Zdjęcie opakowania</label>
           <input class="field-input" id="f-photo" type="file" accept="image/*" />
 
           ${state.saving ? '<div class="mono" style="color:var(--coffee); margin-top:8px">zapisuję...</div>' : ''}
@@ -694,6 +764,16 @@ function renderModalAddMember() {
           <label class="field-label">Imię</label>
           <input class="field-input" id="f-member-name" placeholder="np. Zosia" autocomplete="off" />
 
+          <label class="field-label">Płeć</label>
+          <div style="display:flex; gap:8px; margin-bottom:12px">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer">
+              <input type="radio" name="f-gender" value="K" checked /> Kobieta
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer">
+              <input type="radio" name="f-gender" value="M" /> Mężczyzna
+            </label>
+          </div>
+
           <label class="field-label">Ulubiona kawa</label>
           <input class="field-input" id="f-member-drink" placeholder="np. flat white, espresso..." />
 
@@ -745,6 +825,17 @@ function attachEvents() {
     render();
   };
 
+  // zarejestruj zakup (karta "twoja kolej")
+  const btnMyTurnRegister = $('#btn-my-turn-register');
+  if (btnMyTurnRegister) btnMyTurnRegister.onclick = () => {
+    const cr = state.data.rounds.find(r => r.number === state.data.currentRound);
+    const myDraw = cr?.draws.find(d => d.memberId === state.whoAmI);
+    if (!myDraw) return;
+    state.modal = 'purchase';
+    state.modalData = { drawId: myDraw.id };
+    render();
+  };
+
   // zarejestruj zakup (z ekranu wyniku)
   const btnRegister = $('#btn-register');
   if (btnRegister) btnRegister.onclick = () => {
@@ -759,12 +850,11 @@ function attachEvents() {
   // zarejestruj zakup (z rankingu)
   const btnOpenRegister = $('#btn-open-register');
   if (btnOpenRegister) btnOpenRegister.onclick = () => {
-    // znajdź draw bieżącego użytkownika bez zakupu
-    const myDraw = state.data.rounds
-      .flatMap(r => r.draws)
-      .find(d => d.memberId === state.whoAmI && !purchaseForDraw(d.id));
+    const cr = state.data.rounds.find(r => r.number === state.data.currentRound);
+    const myDraw = cr?.draws.find(d => d.memberId === state.whoAmI && !purchaseForDraw(d.id));
+    if (!myDraw) return;
     state.modal = 'purchase';
-    state.modalData = { drawId: myDraw?.id };
+    state.modalData = { drawId: myDraw.id };
     render();
   };
 
@@ -829,6 +919,10 @@ function attachEvents() {
   // dodaj uczestnika — zapisz
   const btnSaveMember = $('#btn-save-member');
   if (btnSaveMember) btnSaveMember.onclick = saveNewMember;
+
+  // nowa runda
+  const btnNewRound = $('#btn-new-round');
+  if (btnNewRound) btnNewRound.onclick = startNewRound;
 }
 
 /* ---------- 12. AKCJE ZAPISU ---------- */
@@ -848,18 +942,22 @@ async function startDraw() {
   try {
     const drawId = 'd' + uid();
     const today = new Date().toISOString().slice(0, 10);
-    await sb.post('draws', {
+    const savedDraw = await sb.post('draws', {
       id: drawId,
       round_number: state.data.currentRound,
       member_id: winner.id,
       draw_date: today,
     });
+    // użyj ID z bazy (może się różnić od lokalnie wygenerowanego)
+    const actualDrawId = (Array.isArray(savedDraw) ? savedDraw[0] : savedDraw)?.id ?? drawId;
     // dodaj lokalnie (bez reloadu, żeby nie przerywać animacji)
-    const currentRoundObj = state.data.rounds.find(r => r.number === state.data.currentRound);
-    if (currentRoundObj) {
-      currentRoundObj.draws.unshift({ id: drawId, memberId: winner.id, date: today });
+    let currentRoundObj = state.data.rounds.find(r => r.number === state.data.currentRound);
+    if (!currentRoundObj) {
+      currentRoundObj = { number: state.data.currentRound, draws: [] };
+      state.data.rounds.unshift(currentRoundObj);
     }
-    state.draw.savedDrawId = drawId;
+    currentRoundObj.draws.unshift({ id: actualDrawId, memberId: winner.id, date: today });
+    state.draw.savedDrawId = actualDrawId;
   } catch (err) {
     console.error('Błąd zapisu losowania:', err);
   }
@@ -949,8 +1047,9 @@ async function saveRating() {
 }
 
 async function saveNewMember() {
-  const name  = $('#f-member-name')?.value?.trim();
-  const drink = $('#f-member-drink')?.value?.trim() || 'kawa';
+  const name   = $('#f-member-name')?.value?.trim();
+  const drink  = $('#f-member-drink')?.value?.trim() || 'kawa';
+  const gender = document.querySelector('input[name="f-gender"]:checked')?.value || 'K';
 
   if (!name) {
     alert('Wpisz imię uczestnika.');
@@ -972,12 +1071,13 @@ async function saveNewMember() {
       id: memberId,
       name,
       drink,
+      gender,
       active: true,
       today_off: false,
     });
 
     // dodaj lokalnie
-    state.data.team.push({ id: memberId, name, drink, active: true, today_off: false });
+    state.data.team.push({ id: memberId, name, drink, gender, active: true, today_off: false });
     state.data.team.sort((a, b) => a.name.localeCompare(b.name));
 
     state.modal = null;
@@ -1007,6 +1107,24 @@ async function deactivateMember(memberId) {
     console.error('Błąd dezaktywacji:', err);
     member.active = true;
     render();
+    alert('Błąd: ' + err.message);
+  }
+}
+
+async function startNewRound() {
+  const newNumber = state.data.currentRound + 1;
+  if (!confirm(`Rozpocząć rundę ${newNumber}? Wszyscy wracają do losowania.`)) return;
+
+  try {
+    await sb.patch('rounds', 'is_current=eq.true', { is_current: false });
+    await sb.post('rounds', { number: newNumber, is_current: true });
+
+    state.data.rounds.unshift({ number: newNumber, draws: [] });
+    state.data.currentRound = newNumber;
+    state.draw = { stage: 'idle', winner: null, gifUrl: null };
+    render();
+  } catch (err) {
+    console.error('Błąd tworzenia nowej rundy:', err);
     alert('Błąd: ' + err.message);
   }
 }
@@ -1102,7 +1220,7 @@ async function loadGif() {
 function spawnConfetti() {
   const stage = $('#result-stage');
   if (!stage) return;
-  const colors = ['#8b5a2b','#c9a55b','#e9d8b8','#6b3e1a','#b54b3a'];
+  const colors = ['#030213','#1b1b1f','#e9ebef','#d4183d','#717182'];
   for (let i = 0; i < 30; i++) {
     const c = document.createElement('div');
     c.className = 'confetti';
@@ -1123,7 +1241,6 @@ function spawnConfetti() {
   } catch (err) {
     $('#app').innerHTML = `
       <div style="padding:60px; text-align:center; color:var(--ink-soft)">
-        <div style="font-size:32px; margin-bottom:12px">☕</div>
         <div class="mono">błąd ładowania danych</div>
         <div style="font-size:12px; margin-top:8px; color:var(--ink-soft)">${err.message}</div>
       </div>
