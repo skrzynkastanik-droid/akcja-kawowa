@@ -237,7 +237,7 @@ button { font-family: inherit; cursor: pointer; }
   color: var(--paper);
   border: none;
   border-radius: 100px;
-  box-shadow: 0 8px 0 var(--coffee-2), var(--shadow-2);
+  box-shadow: var(--shadow-1);
   transition: all 0.1s;
   letter-spacing: 0.02em;
 }
