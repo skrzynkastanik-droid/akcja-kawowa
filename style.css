@@ -414,7 +414,7 @@ button { font-family: inherit; cursor: pointer; }
   justify-content: center;
   font-weight: 600;
   font-size: 13px;
-  color: var(--ink-2);
+  color: var(--ink);
 }
 .drawn-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .drawn-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
