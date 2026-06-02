@@ -398,7 +398,7 @@ button { font-family: inherit; cursor: pointer; }
   border: 1px solid var(--line);
 }
 .member-row.is-out  { opacity: 0.5; }
-.member-row.is-ho   { opacity: 0.6; background: var(--paper-2); }
+.member-row.is-ho   { opacity: 0.6; }
 .member-row .name   { flex: 1; font-weight: 500; }
 .member-row.is-out .name { text-decoration: line-through; }
 .member-row.drawn-row { opacity: 0.85; }
@@ -406,7 +406,7 @@ button { font-family: inherit; cursor: pointer; }
   width: 48px;
   height: 48px;
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: 50%;
   background: var(--cream);
   overflow: hidden;
   display: flex;
