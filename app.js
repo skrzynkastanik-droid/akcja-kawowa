@@ -1220,7 +1220,7 @@ async function loadGif() {
 function spawnConfetti() {
   const stage = $('#result-stage');
   if (!stage) return;
-  const colors = ['#8b5a2b','#c9a55b','#e9d8b8','#6b3e1a','#b54b3a'];
+  const colors = ['#030213','#1b1b1f','#e9ebef','#d4183d','#717182'];
   for (let i = 0; i < 30; i++) {
     const c = document.createElement('div');
     c.className = 'confetti';
