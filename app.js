@@ -1007,7 +1007,7 @@ async function savePurchase() {
     state.draw = { stage: 'idle', winner: null, gifUrl: null };
     state.tab = 'ranking';
     render();
-    showToast('☕ Zakup zarejestrowany!');
+    showToast('Zakup zarejestrowany!');
   } catch (err) {
     console.error('Błąd zapisu zakupu:', err);
     state.saving = false;
