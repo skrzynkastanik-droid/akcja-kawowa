@@ -5,22 +5,25 @@
 
 /* ZMIENNE (kolory, fonty) */
 :root {
-  /* paleta — ciepłe brązy + neutralne tła */
-  --paper:     #f7f3ec;   /* tło strony */
-  --paper-2:   #ede5d3;   /* tło kart */
-  --line:      #d9cfb8;   /* linie i obramowania */
-  --ink:       #2a221a;   /* główny tekst */
-  --ink-2:     #5a4f40;   /* drugorzędny tekst */
-  --ink-soft:  #8a7e6a;   /* podpisy, mono */
-  --coffee:    #8b5a2b;   /* akcent — espresso */
-  --coffee-2:  #6b3e1a;   /* ciemniejszy akcent */
-  --cream:     #e9d8b8;   /* miękki akcent */
-  --gold:      #c9a55b;   /* podkreślenia, medale */
-  --danger:    #b54b3a;   /* niebezpieczeństwo / out */
+  /* paleta — neutralna, czysta (light mode) */
+  --paper:      #ffffff;            /* tło strony         ← background */
+  --paper-2:    #eef0f5;            /* tło kart           ← secondary */
+  --line:       rgba(0,0,0,0.1);    /* linie i obramowania ← border */
+  --ink:        #1b1b1f;            /* główny tekst       ← foreground */
+  --ink-2:      #717182;            /* drugorzędny tekst  ← muted-foreground */
+  --ink-soft:   #717182;            /* podpisy, mono      ← muted-foreground */
+  --coffee:     #030213;            /* akcent główny      ← primary */
+  --coffee-2:   #000000;            /* ciemniejszy akcent ← primary dark */
+  --cream:      #e9ebef;            /* miękki akcent      ← accent */
+  --gold:       rgba(3,2,19,0.3);   /* wyróżnienia        ← border emphasis */
+  --danger:     #d4183d;            /* błąd / out         ← destructive */
+  --surface:    #f3f3f5;            /* tło inputów        ← input-background */
+  --border:     rgba(0,0,0,0.1);    /* alias --line       ← border */
+  --muted:      #ececf0;
 
-  --shadow-1: 0 1px 2px rgba(42,34,26,0.08);
-  --shadow-2: 0 4px 16px rgba(42,34,26,0.12);
-  --shadow-3: 0 12px 40px rgba(42,34,26,0.18);
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-2: 0 4px 16px rgba(0,0,0,0.08);
+  --shadow-3: 0 12px 40px rgba(0,0,0,0.12);
   --radius:   10px;
 }
 
