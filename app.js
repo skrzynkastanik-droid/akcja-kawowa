@@ -1007,6 +1007,7 @@ async function savePurchase() {
     state.draw = { stage: 'idle', winner: null, gifUrl: null };
     state.tab = 'ranking';
     render();
+    showToast('☕ Zakup zarejestrowany!');
   } catch (err) {
     console.error('Błąd zapisu zakupu:', err);
     state.saving = false;
@@ -1237,15 +1238,15 @@ function spawnConfetti() {
 function showToast(message, type = 'success', duration = 3000) {
   const existing = document.getElementById('ak-toast');
   if (existing) existing.remove();
- 
+
   const toast = document.createElement('div');
   toast.id = 'ak-toast';
   toast.className = `ak-toast ak-toast-${type}`;
   toast.textContent = message;
   document.body.appendChild(toast);
- 
+
   requestAnimationFrame(() => toast.classList.add('ak-toast-visible'));
- 
+
   setTimeout(() => {
     toast.classList.remove('ak-toast-visible');
     setTimeout(() => toast.remove(), 300);
