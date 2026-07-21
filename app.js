@@ -268,11 +268,6 @@ function renderDrawIdle() {
   const isMyTurn = !!(myDraw && !myPurchase);
   const daysSinceDrawn = myDraw ? Math.floor((Date.now() - new Date(myDraw.date)) / 86400000) : 0;
   const remaining = Math.max(0, 7 - daysSinceDrawn);
-  const calUrl = myDraw ? (() => {
-    const d = new Date(new Date(myDraw.date).getTime() + 7 * 86400000);
-    const fmt = (dt) => dt.toISOString().slice(0,10).replace(/-/g,'');
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=Kup+kawę+dla+zespołu&dates=${fmt(d)}%2F${fmt(d)}&details=Akcja+Kawowa+runda+${state.data.currentRound}&sf=true&output=xml`;
-  })() : '#';
 
   return `
     <div class="draw-stage">
