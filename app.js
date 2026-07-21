@@ -1193,7 +1193,7 @@ function animateReel(winner) {
 async function loadGif() {
   const slot = $('#gif-slot');
   if (!slot) return;
-  const KEY = 'dc6zaTOxFJmzC';
+  const KEY = 'Ul846NALYcUAu7Zwm3vbhuKJCYjeSevx';
   const tags = ['coffee', 'celebration', 'drama', 'wow'];
   const tag = tags[Math.floor(Math.random() * tags.length)];
   try {
