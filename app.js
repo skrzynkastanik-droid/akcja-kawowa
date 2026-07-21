@@ -410,7 +410,7 @@ function renderDrawResult() {
   const winner = memberById(state.draw.winner);
   return `
     <div class="result fade-in" id="result-stage">
-      <div class="mono">★ wynik losowania · runda ${state.data.currentRound} ★</div>
+      <div class="mono">wynik losowania · runda ${state.data.currentRound}</div>
       <div class="avatar avatar-xl pop" style="background: var(--coffee); color: var(--paper); margin: 16px auto;">
         ${initials(winner.name)}
       </div>
