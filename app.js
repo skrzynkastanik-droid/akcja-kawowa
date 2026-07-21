@@ -487,14 +487,6 @@ function renderHistoria() {
       <h2>Historia losowań</h2>
     </div>
     ${totalDraws === 0 ? emptyState('brak losowań') : `
-    <div class="history-row" style="background:none; border:none; padding:0 16px; margin-bottom:8px;">
-      <span class="mono" style="width:80px">data</span>
-      <span style="width:30px"></span>
-      <span class="mono" style="width:90px">kto</span>
-      <span class="mono" style="flex:1">co</span>
-      <span class="mono" style="width:70px; text-align:right">cena</span>
-      <span class="mono" style="width:50px; text-align:right">ocena</span>
-    </div>
     ${state.data.rounds.map(round => {
       const completed = round.draws.length === state.data.team.filter(p => p.active).length;
       return `
