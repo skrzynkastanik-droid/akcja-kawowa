@@ -596,9 +596,6 @@ function renderRanking() {
         + zarejestruj zakup
       </button>
     </div>
-    <div class="mono" style="margin-bottom:20px">
-      kawa kupowana po losowaniu · oceniana przez zespół (1-10) · zdjęcie opakowania obowiązkowe
-    </div>
 
     ${unrated.length > 0 ? `
       <div class="card" style="margin-bottom:20px; border-left: 3px solid var(--coffee);">
