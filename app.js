@@ -109,6 +109,7 @@ const memberById = (id) => byId(state.data.team, id);
 const initials = (name) => name.slice(0, 2).toUpperCase();
 const uid = () => Math.random().toString(36).slice(2, 10);
 const buyVerb = (member) => member?.gender === 'M' ? 'kupił' : 'kupiła';
+const emptyState = (text) => `<div class="mono" style="padding:40px;text-align:center">${text}</div>`;
 
 function daysAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 86400000);
@@ -428,11 +429,13 @@ function renderDrawResult() {
 /* ---------- 6. ZAKŁADKA: ZESPÓŁ ---------- */
 function renderZespol() {
   const paid = paidThisRound();
+  const active = state.data.team.filter(p => p.active);
   return `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
-      <h2>Zespół (${state.data.team.filter(p => p.active).length})</h2>
+      <h2>Zespół (${active.length})</h2>
       <button class="btn btn-primary" id="btn-open-add-member">+ dodaj uczestnika</button>
     </div>
+    ${active.length === 0 ? emptyState('brak uczestników') : `
     <table class="data">
       <thead>
         <tr>
@@ -445,7 +448,7 @@ function renderZespol() {
         </tr>
       </thead>
       <tbody>
-        ${state.data.team.filter(p => p.active).map(p => `
+        ${active.map(p => `
           <tr>
             <td style="width:48px"><div class="avatar">${initials(p.name)}</div></td>
             <td><strong>${p.name}</strong></td>
@@ -472,14 +475,25 @@ function renderZespol() {
         `).join('')}
       </tbody>
     </table>
+    `}
   `;
 }
 
 /* ---------- 7. ZAKŁADKA: HISTORIA ---------- */
 function renderHistoria() {
+  const totalDraws = state.data.rounds.reduce((s, r) => s + r.draws.length, 0);
   return `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
       <h2>Historia losowań</h2>
+    </div>
+    ${totalDraws === 0 ? emptyState('brak losowań') : `
+    <div class="history-row" style="background:none; border:none; padding:0 16px; margin-bottom:8px;">
+      <span class="mono" style="width:80px">data</span>
+      <span style="width:30px"></span>
+      <span class="mono" style="width:90px">kto</span>
+      <span class="mono" style="flex:1">co</span>
+      <span class="mono" style="width:70px; text-align:right">cena</span>
+      <span class="mono" style="width:50px; text-align:right">ocena</span>
     </div>
     ${state.data.rounds.map(round => {
       const completed = round.draws.length === state.data.team.filter(p => p.active).length;
@@ -504,13 +518,14 @@ function renderHistoria() {
         </div>
       `;
     }).join('')}
+    `}
   `;
 }
 
 /* ---------- 8. ZAKŁADKA: STATYSTYKI ---------- */
 function renderStatystyki() {
   const purchases = state.data.purchases;
-  if (purchases.length === 0) return '<div class="mono" style="padding:40px;text-align:center">brak danych</div>';
+  if (purchases.length === 0) return emptyState('brak danych');
 
   const total = purchases.reduce((s, p) => s + p.price, 0);
   const avg = total / purchases.length;
@@ -611,7 +626,7 @@ function renderRanking() {
       </div>
     ` : ''}
 
-    ${ranked.length === 0 ? '<div class="mono" style="padding:40px;text-align:center;color:var(--ink-soft)">brak ocenionych zakupów</div>' : `
+    ${ranked.length === 0 ? emptyState('brak ocenionych zakupów') : `
     <div class="ranking-top">
       ${top3.map((p, i) => {
         const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
@@ -640,6 +655,12 @@ function renderRanking() {
     ${rest.length ? `
       <div class="mono" style="margin-bottom:8px">pozostałe</div>
       <div class="rank-list">
+        <div class="rank-row" style="background:none; border:none; padding:0 14px;">
+          <span class="mono" style="width:36px">#</span>
+          <span style="width:48px"></span>
+          <span class="mono" style="flex:1">kawa</span>
+          <span class="mono">ocena</span>
+        </div>
         ${rest.map((p, idx) => {
           const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
           const buyer = memberById(draw.memberId);
