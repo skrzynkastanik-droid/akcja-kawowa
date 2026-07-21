@@ -525,7 +525,7 @@ function renderHistoria() {
 /* ---------- 8. ZAKŁADKA: STATYSTYKI ---------- */
 function renderStatystyki() {
   const purchases = state.data.purchases;
-  if (purchases.length === 0) return emptyState('brak danych');
+  if (purchases.length === 0) return `<h2 style="margin-bottom:16px">Statystyki</h2>${emptyState('brak danych')}`;
 
   const total = purchases.reduce((s, p) => s + p.price, 0);
   const avg = total / purchases.length;
