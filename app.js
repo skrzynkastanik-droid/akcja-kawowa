@@ -485,7 +485,7 @@ function renderHistoria() {
       const completed = round.draws.length === state.data.team.filter(p => p.active).length;
       return `
         <div class="history-section">
-          <div class="label">runda ${round.number} ${completed ? '(zakończona)'} · ${round.draws.length} losowań</div>
+          <div class="label">runda ${round.number} ${completed ? '(zakończona)' : '— bieżąca'} · ${round.draws.length} losowań</div>
           ${[...round.draws].sort((a, b) => new Date(b.date) - new Date(a.date) || b.id.localeCompare(a.id)).map(d => {
             const m = memberById(d.memberId);
             const p = purchaseForDraw(d.id);
