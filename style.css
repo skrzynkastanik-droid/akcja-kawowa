@@ -241,8 +241,8 @@ button { font-family: inherit; cursor: pointer; }
   transition: all 0.1s;
   letter-spacing: 0.02em;
 }
-.btn-draw:hover { transform: translateY(-2px); box-shadow: 0 10px 0 var(--coffee-2), var(--shadow-3); }
-.btn-draw:active { transform: translateY(6px); box-shadow: 0 2px 0 var(--coffee-2), var(--shadow-1); }
+.btn-draw:hover { box-shadow: var(--shadow-3); }
+.btn-draw:active { box-shadow: var(--shadow-1); }
 .btn-draw:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .draw-hint {
