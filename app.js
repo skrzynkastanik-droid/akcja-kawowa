@@ -501,8 +501,8 @@ function renderHistoria() {
                 <div class="avatar" style="width:30px; height:30px; font-size:11px">${initials(m.name)}</div>
                 <span class="who">${m.name}</span>
                 <span class="what">${p ? `${p.brand} · ${p.variety}` : '<em style="color:var(--ink-soft)">brak zakupu</em>'}</span>
-                <span class="price">${p ? `${p.price} zł` : '—'}</span>
-                <span class="score">${score !== null ? score.toFixed(1) : '—'}</span>
+                <span class="price">${p ? `${p.price} zł` : '<span class="empty">—</span>'}</span>
+                <span class="score">${score !== null ? score.toFixed(1) : '<span class="empty">—</span>'}</span>
               </div>
             `;
           }).join('')}

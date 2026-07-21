@@ -606,6 +606,7 @@ table.data tr:hover { background: var(--paper-2); }
 .history-row .price   { width: 70px; text-align: right; }
 .history-row .score   { width: 50px; text-align: right; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; font-weight: 600; }
 .history-row.is-completed { opacity: 0.7; }
+.history-row .empty  { font-size: 15px; font-weight: 400; color: var(--ink-soft); }
 
 .round-banner {
   background: var(--paper-2);
