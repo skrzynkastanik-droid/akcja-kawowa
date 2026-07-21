@@ -585,13 +585,8 @@ function renderRanking() {
   const rest = ranked.slice(3);
   const medal = (i) => ['🥇','🥈','🥉'][i] || '';
 
-  // zakupy bez ocen — można ocenić
-  const unrated = state.data.purchases.filter(p => {
-    const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
-    const isMine = draw?.memberId === state.whoAmI;
-    const alreadyRated = myRatingForPurchase(p.id);
-    return !isMine && !alreadyRated;
-  });
+  // zakupy bez ocen — można ocenić (również własne)
+  const unrated = state.data.purchases.filter(p => !myRatingForPurchase(p.id));
 
   // przycisk rejestracji: aktywny tylko dla wylosowanych w bieżącej rundzie bez zakupu
   const currentRound = state.data.rounds.find(r => r.number === state.data.currentRound);
