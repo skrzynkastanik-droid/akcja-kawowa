@@ -1268,18 +1268,22 @@ function animateReel(winner) {
   let start = null;
   const duration = 3500;
 
+  const settleAt = 0.8; // do tego momentu bęben swobodnie się kręci, dopiero potem ląduje na wyniku
+
   function tick(timestamp) {
     if (!start) start = timestamp;
     const elapsed = timestamp - start;
     const progress = Math.min(elapsed / duration, 1);
-    const eased = 1 - Math.pow(1 - progress, 3);
+    const eased = progress < settleAt
+      ? (progress / settleAt) * 0.6
+      : 0.6 + 0.4 * (1 - Math.pow(1 - (progress - settleAt) / (1 - settleAt), 3));
     const x = -targetX * eased;
     track.style.transform = `translateX(${x}px)`;
 
     items.forEach((el, i) => {
       const elCenter = (i * itemWidth) + items[0].offsetWidth / 2 + x;
       const dist = Math.abs(elCenter - reelCenter);
-      const closeness = Math.max(0, 1 - dist / 200);
+      const closeness = progress < settleAt ? 0 : Math.max(0, 1 - dist / 200);
       el.style.opacity = 0.3 + closeness * 0.7;
       el.style.transform = `scale(${1 + closeness * 0.4})`;
       el.style.color = closeness > 0.7 ? 'var(--coffee)' : 'var(--ink-2)';

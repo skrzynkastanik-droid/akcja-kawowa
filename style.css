@@ -227,6 +227,7 @@ button { font-family: inherit; cursor: pointer; }
   text-align: center;
   padding: 40px 20px;
   position: relative;
+  min-width: 0;
 }
 .btn-draw {
   font-family: 'Inter', system-ui, sans-serif;
@@ -312,7 +313,6 @@ button { font-family: inherit; cursor: pointer; }
   overflow: hidden;
   display: flex;
   align-items: center;
-  justify-content: center;
 }
 .reel-track {
   display: flex;
