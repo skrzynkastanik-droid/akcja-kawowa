@@ -468,7 +468,8 @@ function renderZespol() {
                   data-presence="${p.id}" data-off="true">✕ Nieobecny</button>
               </div>
             </td>
-            <td style="width:40px; text-align:center">
+            <td style="width:70px; text-align:center; white-space:nowrap">
+              <button class="btn-edit" data-edit="${p.id}" title="Edytuj uczestnika">✎</button>
               <button class="btn-deactivate" data-deactivate="${p.id}" title="Usuń uczestnika">✕</button>
             </td>
           </tr>
@@ -681,6 +682,7 @@ function renderModal() {
   if (state.modal === 'purchase')   return renderModalPurchase();
   if (state.modal === 'rating')     return renderModalRating();
   if (state.modal === 'addMember')  return renderModalAddMember();
+  if (state.modal === 'editMember') return renderModalEditMember();
   return '';
 }
 
@@ -783,6 +785,46 @@ function renderModalAddMember() {
           <button class="btn btn-ghost" id="modal-close-2">Anuluj</button>
           <button class="btn btn-primary" id="btn-save-member" ${state.saving ? 'disabled' : ''}>
             Dodaj do zespołu
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderModalEditMember() {
+  const member = memberById(state.modalData.memberId);
+  if (!member) return '';
+  return `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>✎ Edytuj uczestnika</h3>
+          <button class="btn btn-ghost" id="modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <label class="field-label">Imię</label>
+          <input class="field-input" id="f-edit-member-name" value="${member.name}" autocomplete="off" />
+
+          <label class="field-label">Płeć</label>
+          <div style="display:flex; gap:8px; margin-bottom:12px">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer">
+              <input type="radio" name="f-edit-gender" value="K" ${member.gender === 'K' ? 'checked' : ''} /> Kobieta
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer">
+              <input type="radio" name="f-edit-gender" value="M" ${member.gender === 'M' ? 'checked' : ''} /> Mężczyzna
+            </label>
+          </div>
+
+          <label class="field-label">Ulubiona kawa</label>
+          <input class="field-input" id="f-edit-member-drink" value="${member.drink}" placeholder="np. flat white, espresso..." />
+
+          ${state.saving ? '<div class="mono" style="color:var(--coffee); margin-top:8px">zapisuję...</div>' : ''}
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" id="modal-close-2">Anuluj</button>
+          <button class="btn btn-primary" id="btn-save-edit-member" ${state.saving ? 'disabled' : ''}>
+            Zapisz zmiany
           </button>
         </div>
       </div>
@@ -907,6 +949,19 @@ function attachEvents() {
   document.querySelectorAll('[data-deactivate]').forEach(el => {
     el.onclick = () => deactivateMember(el.dataset.deactivate);
   });
+
+  // edycja uczestnika — otwórz modal
+  document.querySelectorAll('[data-edit]').forEach(el => {
+    el.onclick = () => {
+      state.modal = 'editMember';
+      state.modalData = { memberId: el.dataset.edit };
+      render();
+    };
+  });
+
+  // edycja uczestnika — zapisz
+  const btnSaveEditMember = $('#btn-save-edit-member');
+  if (btnSaveEditMember) btnSaveEditMember.onclick = saveEditMember;
 
   // dodaj uczestnika — otwórz modal
   const btnOpenAddMember = $('#btn-open-add-member');
@@ -1087,6 +1142,51 @@ async function saveNewMember() {
     render();
   } catch (err) {
     console.error('Błąd zapisu uczestnika:', err);
+    state.saving = false;
+    alert('Błąd zapisu: ' + err.message);
+    render();
+  }
+}
+
+async function saveEditMember() {
+  const memberId = state.modalData.memberId;
+  const member = memberById(memberId);
+  if (!member) return;
+
+  const name   = $('#f-edit-member-name')?.value?.trim();
+  const drink  = $('#f-edit-member-drink')?.value?.trim() || 'kawa';
+  const gender = document.querySelector('input[name="f-edit-gender"]:checked')?.value || 'K';
+
+  if (!name) {
+    alert('Wpisz imię uczestnika.');
+    return;
+  }
+
+  const nameExists = state.data.team.some(p => p.id !== memberId && p.name.toLowerCase() === name.toLowerCase());
+  if (nameExists) {
+    alert(`„${name}" już jest w zespole.`);
+    return;
+  }
+
+  state.saving = true;
+  render();
+
+  try {
+    await sb.patch('team', `id=eq.${memberId}`, { name, drink, gender });
+
+    // zaktualizuj lokalnie
+    member.name = name;
+    member.drink = drink;
+    member.gender = gender;
+    state.data.team.sort((a, b) => a.name.localeCompare(b.name));
+
+    state.modal = null;
+    state.modalData = {};
+    state.saving = false;
+    render();
+    showToast('Zapisano zmiany.');
+  } catch (err) {
+    console.error('Błąd edycji uczestnika:', err);
     state.saving = false;
     alert('Błąd zapisu: ' + err.message);
     render();

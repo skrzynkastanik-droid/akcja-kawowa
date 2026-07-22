@@ -883,7 +883,8 @@ table.data tr:hover { background: var(--paper-2); }
   opacity: 1;
 }
 
-/* btn-deactivate */
+/* btn-edit / btn-deactivate */
+.btn-edit,
 .btn-deactivate {
   background: none;
   border: none;
@@ -894,6 +895,11 @@ table.data tr:hover { background: var(--paper-2); }
   border-radius: 4px;
   transition: color 0.15s, background 0.15s;
   line-height: 1;
+}
+
+.btn-edit:hover {
+  color: var(--coffee);
+  background: #f1e9e2;
 }
 
 .btn-deactivate:hover {
