@@ -160,6 +160,8 @@ function myRatingForPurchase(purchaseId) {
 }
 
 /* ---------- 4. RENDER GŁÓWNY ---------- */
+let lastRenderedTab = null;
+
 function render() {
   if (!state.whoAmI) {
     $('#app').innerHTML = renderWhoAmI();
@@ -167,10 +169,13 @@ function render() {
     return;
   }
 
+  const tabChanged = state.tab !== lastRenderedTab;
+  lastRenderedTab = state.tab;
+
   $('#app').innerHTML = `
     ${renderTopbar()}
     ${renderTabs()}
-    <div id="tab-content" class="fade-in">
+    <div id="tab-content" class="${tabChanged ? 'fade-in' : ''}">
       ${renderTab()}
     </div>
     ${state.modal ? renderModal() : ''}
