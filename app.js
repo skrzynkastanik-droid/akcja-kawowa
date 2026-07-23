@@ -622,8 +622,9 @@ function renderRanking() {
       ${top3.map((p, i) => {
         const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
         const buyer = memberById(draw.memberId);
+        const needsRate = !myRatingForPurchase(p.id);
         return `
-          <div class="rank-card ${i === 0 ? 'top1' : ''}" data-card="${p.id}">
+          <div class="rank-card ${i === 0 ? 'top1' : ''} ${needsRate ? 'needs-rate' : ''}" data-card="${p.id}">
             <div class="photo">
               ${p.photo
                 ? `<img src="${p.photo}" alt="kawa" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>`
@@ -634,6 +635,7 @@ function renderRanking() {
                 <span class="rank-num">#${i + 1}</span>
                 <span class="score">${p.score.toFixed(1)}</span>
               </div>
+              ${needsRate ? `<span class="badge badge-rate" style="display:inline-block; margin-bottom:6px">do oceny</span>` : ''}
               <div class="brand">${p.brand}</div>
               <div class="variety">${p.variety}</div>
               <div class="meta">${buyer.name} · ${p.price} zł · ${p.votes} ocen</div>
@@ -655,14 +657,15 @@ function renderRanking() {
         ${rest.map((p, idx) => {
           const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
           const buyer = memberById(draw.memberId);
+          const needsRate = !myRatingForPurchase(p.id);
           return `
-            <div class="rank-row" data-card="${p.id}">
+            <div class="rank-row ${needsRate ? 'needs-rate' : ''}" data-card="${p.id}">
               <span class="num">#${idx + 4}</span>
               <div class="thumb">
                 ${p.photo ? `<img src="${p.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:4px"/>` : ''}
               </div>
               <div class="text">
-                <div class="b">${p.brand} <span class="v">· ${p.variety}</span></div>
+                <div class="b">${p.brand} <span class="v">· ${p.variety}</span> ${needsRate ? `<span class="badge badge-rate">do oceny</span>` : ''}</div>
                 <div class="v">${buyer.name} · ${p.price} zł · ${p.votes} ocen</div>
               </div>
               <span class="score" style="font-size:22px; font-weight:600">${p.score.toFixed(1)}</span>
@@ -773,7 +776,7 @@ function renderModalCoffeeCard() {
     <div class="modal-overlay" id="modal-overlay">
       <div class="modal" style="width:min(560px, 94vw)">
         <div class="modal-header">
-          <h3>Karta kawy</h3>
+          <h3>Karta kawy ${canRate ? `<span class="badge badge-rate" style="margin-left:8px; vertical-align:middle">do oceny</span>` : ''}</h3>
           <button class="btn btn-ghost" id="modal-close">✕</button>
         </div>
         <div class="modal-body">

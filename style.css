@@ -213,6 +213,7 @@ button { font-family: inherit; cursor: pointer; }
 .badge-out  { background: var(--muted); color: var(--ink-soft); }
 .badge-ho   { background: #fde8e8; color: #a82020; }
 .badge-game { background: var(--coffee); color: var(--paper); }
+.badge-rate { background: #fff1cf; color: #8a5a00; }
 
 /* ZAKŁADKA: LOSOWANIE */
 .draw-stage {
@@ -484,6 +485,7 @@ table.data tr:hover { background: var(--paper-2); }
 }
 .rank-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
 .rank-card.top1 { border-color: var(--gold); }
+.rank-card.needs-rate, .rank-row.needs-rate { border-color: #d99a00; }
 .rank-card, .rank-row { cursor: pointer; }
 .rank-row:hover { border-color: var(--coffee); }
 .rank-card .photo {
