@@ -588,8 +588,8 @@ function renderRanking() {
   const rest = ranked.slice(3);
   const medal = (i) => ['🥇','🥈','🥉'][i] || '';
 
-  // zakupy bez ocen — można ocenić (również własne)
-  const unrated = state.data.purchases.filter(p => !myRatingForPurchase(p.id));
+  // zakupy bez żadnej oceny — nie trafiają jeszcze do rankingu, więc pokazujemy je osobno (wejście przez kartę kawy)
+  const unrated = state.data.purchases.filter(p => avgScore(p.id) === null);
 
   // przycisk rejestracji: aktywny tylko dla wylosowanych w bieżącej rundzie bez zakupu
   const currentRound = state.data.rounds.find(r => r.number === state.data.currentRound);
@@ -607,13 +607,11 @@ function renderRanking() {
 
     ${unrated.length > 0 ? `
       <div class="card" style="margin-bottom:20px; border-left: 3px solid var(--coffee);">
-        <h3 style="margin-bottom:12px">⭐ oceń kawę</h3>
+        <h3 style="margin-bottom:12px">jeszcze nieocenione</h3>
         ${unrated.map(p => `
-          <div class="history-row" style="margin-bottom:8px">
+          <div class="history-row" style="margin-bottom:8px; cursor:pointer" data-card="${p.id}">
             <span class="what">${p.brand} · ${p.variety}</span>
-            <button class="btn btn-primary" style="font-size:12px; padding:4px 10px" data-rate="${p.id}">
-              oceń
-            </button>
+            <span class="mono" style="color:var(--ink-soft)">karta kawy →</span>
           </div>
         `).join('')}
       </div>
@@ -729,7 +727,7 @@ function renderModalRating() {
     <div class="modal-overlay" id="modal-overlay">
       <div class="modal">
         <div class="modal-header">
-          <h3>⭐ Oceń kawę</h3>
+          <h3>Oceń kawę</h3>
           <button class="btn btn-ghost" id="modal-close">✕</button>
         </div>
         <div class="modal-body" style="text-align:center">
@@ -775,7 +773,7 @@ function renderModalCoffeeCard() {
     <div class="modal-overlay" id="modal-overlay">
       <div class="modal" style="width:min(560px, 94vw)">
         <div class="modal-header">
-          <h3>☕ Karta kawy</h3>
+          <h3>Karta kawy</h3>
           <button class="btn btn-ghost" id="modal-close">✕</button>
         </div>
         <div class="modal-body">
@@ -826,7 +824,7 @@ function renderModalCoffeeCard() {
         </div>
         <div class="modal-footer">
           <button class="btn btn-ghost" id="modal-close-2">Zamknij</button>
-          ${canRate ? `<button class="btn btn-primary" id="btn-rate-from-card">⭐ Oceń kawę</button>` : ''}
+          ${canRate ? `<button class="btn btn-primary" id="btn-rate-from-card">Oceń kawę</button>` : ''}
         </div>
       </div>
     </div>
@@ -838,7 +836,7 @@ function renderModalAddMember() {
     <div class="modal-overlay" id="modal-overlay">
       <div class="modal">
         <div class="modal-header">
-          <h3>👤 Dodaj uczestnika</h3>
+          <h3>Dodaj uczestnika</h3>
           <button class="btn btn-ghost" id="modal-close">✕</button>
         </div>
         <div class="modal-body">
@@ -1012,15 +1010,6 @@ function attachEvents() {
   // zapisz ocenę
   const btnSaveRating = $('#btn-save-rating');
   if (btnSaveRating) btnSaveRating.onclick = saveRating;
-
-  // oceń kawę (przyciski w rankingu)
-  document.querySelectorAll('[data-rate]').forEach(el => {
-    el.onclick = () => {
-      state.modal = 'rating';
-      state.modalData = { purchaseId: el.dataset.rate, score: 7, comment: '' };
-      render();
-    };
-  });
 
   // otwórz kartę kawy (klik na kartę/wiersz w rankingu)
   document.querySelectorAll('[data-card]').forEach(el => {
