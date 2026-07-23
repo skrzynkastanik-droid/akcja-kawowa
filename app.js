@@ -97,7 +97,7 @@ async function loadData() {
       variety: p.variety, price: p.price, photo: p.photo_url,
     })),
     ratings: ratings.map(r => ({
-      purchaseId: r.purchase_id, memberId: r.member_id, score: r.score,
+      purchaseId: r.purchase_id, memberId: r.member_id, score: r.score, comment: r.comment ?? null,
     })),
   };
 }
@@ -625,7 +625,7 @@ function renderRanking() {
         const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
         const buyer = memberById(draw.memberId);
         return `
-          <div class="rank-card ${i === 0 ? 'top1' : ''}">
+          <div class="rank-card ${i === 0 ? 'top1' : ''}" data-card="${p.id}">
             <div class="photo">
               ${p.photo
                 ? `<img src="${p.photo}" alt="kawa" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>`
@@ -658,7 +658,7 @@ function renderRanking() {
           const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
           const buyer = memberById(draw.memberId);
           return `
-            <div class="rank-row">
+            <div class="rank-row" data-card="${p.id}">
               <span class="num">#${idx + 4}</span>
               <div class="thumb">
                 ${p.photo ? `<img src="${p.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:4px"/>` : ''}
@@ -683,6 +683,7 @@ function renderModal() {
   if (state.modal === 'rating')     return renderModalRating();
   if (state.modal === 'addMember')  return renderModalAddMember();
   if (state.modal === 'editMember') return renderModalEditMember();
+  if (state.modal === 'coffeeCard') return renderModalCoffeeCard();
   return '';
 }
 
@@ -741,6 +742,10 @@ function renderModalRating() {
             `).join('')}
           </div>
           <div class="mono" style="margin-top:8px">wybrana ocena: <strong>${currentScore}</strong> / 10</div>
+
+          <label class="field-label" style="text-align:left; margin-top:20px">Komentarz (opcjonalnie)</label>
+          <textarea class="field-input" id="f-rating-comment" rows="3" placeholder="Co sądzisz o tej kawie?" style="width:100%; resize:vertical; font-family:inherit; box-sizing:border-box">${state.modalData.comment || ''}</textarea>
+
           ${state.saving ? '<div class="mono" style="color:var(--coffee); margin-top:8px">zapisuję...</div>' : ''}
         </div>
         <div class="modal-footer">
@@ -748,6 +753,80 @@ function renderModalRating() {
           <button class="btn btn-primary" id="btn-save-rating" ${state.saving ? 'disabled' : ''}>
             Zapisz ocenę
           </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderModalCoffeeCard() {
+  const purchase = state.data.purchases.find(p => p.id === state.modalData.purchaseId);
+  if (!purchase) return '';
+
+  const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === purchase.drawId);
+  const buyer = draw ? memberById(draw.memberId) : null;
+  const score = avgScore(purchase.id);
+  const purchaseRatings = state.data.ratings
+    .filter(r => r.purchaseId === purchase.id)
+    .sort((a, b) => b.score - a.score);
+  const canRate = !myRatingForPurchase(purchase.id);
+
+  return `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal" style="width:min(560px, 94vw)">
+        <div class="modal-header">
+          <h3>☕ Karta kawy</h3>
+          <button class="btn btn-ghost" id="modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="coffee-card-head">
+            <div class="coffee-card-photo">
+              ${purchase.photo
+                ? `<img src="${purchase.photo}" alt="kawa"/>`
+                : `<span style="font-size:28px">☕</span>`}
+            </div>
+            <div class="coffee-card-info">
+              <div style="font-size:18px; font-weight:600">${purchase.brand}</div>
+              <div class="mono">${purchase.variety}</div>
+              <div class="mono" style="margin-top:6px; color:var(--ink-soft)">
+                ${buyer ? `${buyVerb(buyer)} ${buyer.name}` : ''} · ${purchase.price} zł
+              </div>
+            </div>
+            <div class="coffee-card-score">
+              <div class="value">${score !== null ? score.toFixed(1) : '—'}</div>
+              <div class="mono">${purchaseRatings.length} ${purchaseRatings.length === 1 ? 'ocena' : 'ocen'}</div>
+            </div>
+          </div>
+
+          <hr class="divider"/>
+
+          <h3 style="margin-bottom:8px">Komentarze</h3>
+          ${purchaseRatings.length === 0
+            ? `<div class="mono" style="padding:12px 0">jeszcze nikt nie ocenił tej kawy</div>`
+            : `<div class="comment-list">
+                ${purchaseRatings.map(r => {
+                  const m = memberById(r.memberId);
+                  return `
+                    <div class="comment-row">
+                      <div class="avatar" style="width:32px; height:32px; font-size:12px">${initials(m?.name || '?')}</div>
+                      <div class="comment-body">
+                        <div class="comment-top">
+                          <span class="comment-name">${m?.name || 'nieznany'}</span>
+                          <span class="comment-score">${r.score}/10</span>
+                        </div>
+                        ${r.comment
+                          ? `<div class="comment-text">${r.comment}</div>`
+                          : `<div class="comment-text comment-empty">bez komentarza</div>`}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>`
+          }
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" id="modal-close-2">Zamknij</button>
+          ${canRate ? `<button class="btn btn-primary" id="btn-rate-from-card">⭐ Oceń kawę</button>` : ''}
         </div>
       </div>
     </div>
@@ -924,6 +1003,12 @@ function attachEvents() {
     };
   });
 
+  // komentarz do oceny (bez pełnego re-render, żeby nie tracić focusu przy pisaniu)
+  const ratingComment = $('#f-rating-comment');
+  if (ratingComment) ratingComment.oninput = (e) => {
+    state.modalData.comment = e.target.value;
+  };
+
   // zapisz ocenę
   const btnSaveRating = $('#btn-save-rating');
   if (btnSaveRating) btnSaveRating.onclick = saveRating;
@@ -932,10 +1017,28 @@ function attachEvents() {
   document.querySelectorAll('[data-rate]').forEach(el => {
     el.onclick = () => {
       state.modal = 'rating';
-      state.modalData = { purchaseId: el.dataset.rate, score: 7 };
+      state.modalData = { purchaseId: el.dataset.rate, score: 7, comment: '' };
       render();
     };
   });
+
+  // otwórz kartę kawy (klik na kartę/wiersz w rankingu)
+  document.querySelectorAll('[data-card]').forEach(el => {
+    el.onclick = () => {
+      state.modal = 'coffeeCard';
+      state.modalData = { purchaseId: el.dataset.card };
+      render();
+    };
+  });
+
+  // oceń kawę (przycisk w karcie kawy)
+  const btnRateFromCard = $('#btn-rate-from-card');
+  if (btnRateFromCard) btnRateFromCard.onclick = () => {
+    const purchaseId = state.modalData.purchaseId;
+    state.modal = 'rating';
+    state.modalData = { purchaseId, score: 7, comment: '' };
+    render();
+  };
 
   // przyciski obecności (W biurze / Nieobecny)
   document.querySelectorAll('[data-presence]').forEach(el => {
@@ -1074,6 +1177,7 @@ async function savePurchase() {
 async function saveRating() {
   const purchaseId = state.modalData.purchaseId;
   const score      = state.modalData.score;
+  const comment    = $('#f-rating-comment')?.value?.trim() || null;
 
   if (!purchaseId || !score) return;
 
@@ -1085,10 +1189,11 @@ async function saveRating() {
       purchase_id: purchaseId,
       member_id: state.whoAmI,
       score,
+      comment,
     });
 
     // dodaj lokalnie
-    state.data.ratings.push({ purchaseId, memberId: state.whoAmI, score });
+    state.data.ratings.push({ purchaseId, memberId: state.whoAmI, score, comment });
 
     state.modal = null;
     state.modalData = {};

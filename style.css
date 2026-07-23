@@ -484,6 +484,8 @@ table.data tr:hover { background: var(--paper-2); }
 }
 .rank-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
 .rank-card.top1 { border-color: var(--gold); }
+.rank-card, .rank-row { cursor: pointer; }
+.rank-row:hover { border-color: var(--coffee); }
 .rank-card .photo {
   aspect-ratio: 4/3;
   background: var(--cream);
@@ -797,6 +799,43 @@ table.data tr:hover { background: var(--paper-2); }
   border-color: var(--coffee);
   color: white;
 }
+
+/* --- Karta kawy --- */
+.coffee-card-head {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.coffee-card-photo {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  background: var(--cream);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.coffee-card-photo img { width: 100%; height: 100%; object-fit: cover; }
+.coffee-card-info { flex: 1; text-align: left; }
+.coffee-card-score { text-align: right; }
+.coffee-card-score .value {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--coffee);
+  line-height: 1;
+}
+
+.comment-list { display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.comment-row { display: flex; gap: 10px; align-items: flex-start; }
+.comment-body { flex: 1; }
+.comment-top { display: flex; justify-content: space-between; gap: 8px; }
+.comment-name { font-weight: 600; font-size: 14px; }
+.comment-score { font-family: 'Inter', system-ui, sans-serif; font-weight: 600; color: var(--coffee); }
+.comment-text { font-size: 14px; color: var(--ink-2); margin-top: 2px; }
+.comment-text.comment-empty { color: var(--ink-soft); font-style: italic; }
 
 /*presence toggle */
 .presence-toggle {
