@@ -481,9 +481,9 @@ table.data tr:hover { background: var(--paper-2); }
   border-radius: var(--radius);
   overflow: hidden;
   position: relative;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: box-shadow 0.1s;
 }
-.rank-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+.rank-card:hover { box-shadow: var(--shadow-3); }
 .rank-card.top1 { border-color: var(--gold); }
 .rank-card.needs-rate, .rank-row.needs-rate { border-color: #d99a00; }
 .rank-card, .rank-row { cursor: pointer; }
