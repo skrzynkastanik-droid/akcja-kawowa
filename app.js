@@ -65,10 +65,11 @@ const state = {
 
 /* ---------- 2. ŁADOWANIE DANYCH ---------- */
 async function loadData() {
-  const [team, rounds, draws, purchases, ratings] = await Promise.all([
+  const [team, rounds, draws, coffees, purchases, ratings] = await Promise.all([
     sb.get('team', 'order=name'),
     sb.get('rounds', 'order=number.desc'),
     sb.get('draws', 'order=draw_date.desc'),
+    sb.get('coffees', 'order=id'),
     sb.get('purchases', 'order=id'),
     sb.get('ratings', 'order=id'),
   ]);
@@ -92,9 +93,11 @@ async function loadData() {
         .filter(d => d.round_number === r.number)
         .map(d => ({ id: d.id, memberId: d.member_id, date: d.draw_date })),
     })),
+    coffees: coffees.map(c => ({
+      id: c.id, brand: c.brand, variety: c.variety, photo: c.photo_url,
+    })),
     purchases: purchases.map(p => ({
-      id: p.id, drawId: p.draw_id, brand: p.brand,
-      variety: p.variety, price: p.price, photo: p.photo_url,
+      id: p.id, drawId: p.draw_id, coffeeId: p.coffee_id, price: p.price,
     })),
     ratings: ratings.map(r => ({
       purchaseId: r.purchase_id, memberId: r.member_id, score: r.score, comment: r.comment ?? null,
@@ -106,6 +109,7 @@ async function loadData() {
 const $ = (sel) => document.querySelector(sel);
 const byId = (list, id) => list.find(x => x.id === id);
 const memberById = (id) => byId(state.data.team, id);
+const coffeeById = (id) => byId(state.data.coffees, id);
 const initials = (name) => name.slice(0, 2).toUpperCase();
 const uid = () => Math.random().toString(36).slice(2, 10);
 const buyVerb = (member) => member?.gender === 'M' ? 'kupił' : 'kupiła';
@@ -144,10 +148,30 @@ function avgScore(purchaseId) {
   return rs.reduce((s, r) => s + r.score, 0) / rs.length;
 }
 
-function rankedPurchases() {
-  return state.data.purchases
-    .map(p => ({ ...p, score: avgScore(p.id), votes: state.data.ratings.filter(r => r.purchaseId === p.id).length }))
-    .filter(p => p.score !== null)
+function purchasesForCoffee(coffeeId) {
+  return state.data.purchases.filter(p => p.coffeeId === coffeeId);
+}
+
+function ratingsForCoffee(coffeeId) {
+  const ids = purchasesForCoffee(coffeeId).map(p => p.id);
+  return state.data.ratings.filter(r => ids.includes(r.purchaseId));
+}
+
+function coffeeScore(coffeeId) {
+  const rs = ratingsForCoffee(coffeeId);
+  if (rs.length === 0) return null;
+  return rs.reduce((s, r) => s + r.score, 0) / rs.length;
+}
+
+function rankedCoffees() {
+  return state.data.coffees
+    .map(c => ({
+      ...c,
+      score: coffeeScore(c.id),
+      votes: ratingsForCoffee(c.id).length,
+      purchases: purchasesForCoffee(c.id),
+    }))
+    .filter(c => c.score !== null)
     .sort((a, b) => b.score - a.score);
 }
 
@@ -347,18 +371,19 @@ function renderDrawIdle() {
                 return out().map(p => {
                   const draw = currentRoundObj?.draws.find(d => d.memberId === p.id);
                   const purchase = draw ? purchaseForDraw(draw.id) : null;
+                  const coffee = purchase ? coffeeById(purchase.coffeeId) : null;
                   return `
                     <div class="member-row drawn-row">
                       <div class="drawn-thumb">
-                        ${purchase?.photo
-                          ? `<img src="${purchase.photo}" alt="kawa"/>`
+                        ${coffee?.photo
+                          ? `<img src="${coffee.photo}" alt="kawa"/>`
                           : `<span>${initials(p.name)}</span>`
                         }
                       </div>
                       <div class="drawn-info">
                         <div style="font-weight:500">${p.name}</div>
-                        ${purchase
-                          ? `<div class="mono">${purchase.brand} · ${purchase.variety}</div>`
+                        ${coffee
+                          ? `<div class="mono">${coffee.brand} · ${coffee.variety}</div>`
                           : `<div class="mono" style="color:var(--gold)">czekamy na rejestrację</div>`
                         }
                       </div>
@@ -501,13 +526,14 @@ function renderHistoria() {
           ${[...round.draws].sort((a, b) => new Date(b.date) - new Date(a.date) || b.id.localeCompare(a.id)).map(d => {
             const m = memberById(d.memberId);
             const p = purchaseForDraw(d.id);
+            const coffee = p ? coffeeById(p.coffeeId) : null;
             const score = p ? avgScore(p.id) : null;
             return `
               <div class="history-row ${completed ? 'is-completed' : ''}">
                 <span class="date">${d.date}</span>
                 <div class="avatar" style="width:30px; height:30px; font-size:11px">${initials(m.name)}</div>
                 <span class="who">${m.name}</span>
-                <span class="what">${p ? `${p.brand} · ${p.variety}` : '<em style="color:var(--ink-soft)">brak zakupu</em>'}</span>
+                <span class="what">${coffee ? `${coffee.brand} · ${coffee.variety}` : '<em style="color:var(--ink-soft)">brak zakupu</em>'}</span>
                 <span class="price">${p ? `${p.price} zł` : '<span class="empty">—</span>'}</span>
                 <span class="score">${score !== null ? score.toFixed(1) : '<span class="empty">—</span>'}</span>
               </div>
@@ -534,7 +560,8 @@ function renderStatystyki() {
   const cupsPerKg = 140;
   const cups = purchases.length * cupsPerKg;
   const priciest = purchases.reduce((a, b) => b.price > a.price ? b : a);
-  const ranked = rankedPurchases();
+  const priciestCoffee = coffeeById(priciest.coffeeId);
+  const ranked = rankedCoffees();
   const best = ranked[0];
 
   return `
@@ -568,7 +595,7 @@ function renderStatystyki() {
       <div class="kpi">
         <div class="label">najdroższa</div>
         <div class="value">${priciest.price} zł</div>
-        <div class="sub">${priciest.brand}</div>
+        <div class="sub">${priciestCoffee.brand}</div>
       </div>
       ${best ? `
       <div class="kpi">
@@ -587,13 +614,25 @@ function renderStatystyki() {
 }
 
 /* ---------- 9. ZAKŁADKA: RANKING ---------- */
+function coffeeMeta(c) {
+  if (c.purchases.length === 1) {
+    const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === c.purchases[0].drawId);
+    const buyer = memberById(draw.memberId);
+    return `${buyer.name} · ${c.purchases[0].price} zł · ${c.votes} ocen`;
+  }
+  const prices = c.purchases.map(p => p.price);
+  const min = Math.min(...prices), max = Math.max(...prices);
+  const priceText = min === max ? `${min} zł` : `${min}–${max} zł`;
+  return `${c.purchases.length}× kupione · ${priceText} · ${c.votes} ocen`;
+}
+
 function renderRanking() {
-  const ranked = rankedPurchases();
+  const ranked = rankedCoffees();
   const top3 = ranked.slice(0, 3);
   const rest = ranked.slice(3);
 
-  // zakupy bez żadnej oceny — nie trafiają jeszcze do rankingu, więc pokazujemy je osobno (wejście przez kartę kawy)
-  const unrated = state.data.purchases.filter(p => avgScore(p.id) === null);
+  // kawy bez żadnej oceny — nie trafiają jeszcze do rankingu, więc pokazujemy je osobno (wejście przez kartę kawy)
+  const unrated = state.data.coffees.filter(c => coffeeScore(c.id) === null);
 
   // przycisk rejestracji: aktywny tylko dla wylosowanych w bieżącej rundzie bez zakupu
   const currentRound = state.data.rounds.find(r => r.number === state.data.currentRound);
@@ -612,9 +651,9 @@ function renderRanking() {
     ${unrated.length > 0 ? `
       <div class="card" style="margin-bottom:20px; border-left: 3px solid var(--coffee);">
         <h3 style="margin-bottom:12px">jeszcze nieocenione</h3>
-        ${unrated.map(p => `
-          <div class="history-row" style="margin-bottom:8px; cursor:pointer" data-card="${p.id}">
-            <span class="what">${p.brand} · ${p.variety}</span>
+        ${unrated.map(c => `
+          <div class="history-row" style="margin-bottom:8px; cursor:pointer" data-card="${c.id}">
+            <span class="what">${c.brand} · ${c.variety}</span>
             <span class="mono" style="color:var(--ink-soft)">karta kawy →</span>
           </div>
         `).join('')}
@@ -623,24 +662,22 @@ function renderRanking() {
 
     ${ranked.length === 0 ? emptyState('brak ocenionych zakupów') : `
     <div class="ranking-top">
-      ${top3.map((p, i) => {
-        const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
-        const buyer = memberById(draw.memberId);
-        const needsRate = !myRatingForPurchase(p.id);
+      ${top3.map((c, i) => {
+        const needsRate = c.purchases.some(p => !myRatingForPurchase(p.id));
         return `
-          <div class="rank-card ${i === 0 ? 'top1' : ''} ${needsRate ? 'needs-rate' : ''}" data-card="${p.id}">
+          <div class="rank-card ${i === 0 ? 'top1' : ''} ${needsRate ? 'needs-rate' : ''}" data-card="${c.id}">
             <div class="photo">
-              <img src="${p.photo}" alt="kawa" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>
+              <img src="${c.photo}" alt="kawa" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>
             </div>
             <div class="body">
               <div class="header">
                 <span class="rank-num">#${i + 1}</span>
-                <span class="score">${p.score.toFixed(1)}</span>
+                <span class="score">${c.score.toFixed(1)}</span>
               </div>
               ${needsRate ? `<span class="badge badge-rate" style="display:inline-block; margin-bottom:6px">do oceny</span>` : ''}
-              <div class="brand">${p.brand}</div>
-              <div class="variety">${p.variety}</div>
-              <div class="meta">${buyer.name} · ${p.price} zł · ${p.votes} ocen</div>
+              <div class="brand">${c.brand}</div>
+              <div class="variety">${c.variety}</div>
+              <div class="meta">${coffeeMeta(c)}</div>
             </div>
           </div>
         `;
@@ -656,21 +693,19 @@ function renderRanking() {
           <span class="mono" style="flex:1">kawa</span>
           <span class="mono">ocena</span>
         </div>
-        ${rest.map((p, idx) => {
-          const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
-          const buyer = memberById(draw.memberId);
-          const needsRate = !myRatingForPurchase(p.id);
+        ${rest.map((c, idx) => {
+          const needsRate = c.purchases.some(p => !myRatingForPurchase(p.id));
           return `
-            <div class="rank-row ${needsRate ? 'needs-rate' : ''}" data-card="${p.id}">
+            <div class="rank-row ${needsRate ? 'needs-rate' : ''}" data-card="${c.id}">
               <span class="num">#${idx + 4}</span>
               <div class="thumb">
-                ${p.photo ? `<img src="${p.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:4px"/>` : ''}
+                ${c.photo ? `<img src="${c.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:4px"/>` : ''}
               </div>
               <div class="text">
-                <div class="b">${p.brand} <span class="v">· ${p.variety}</span> ${needsRate ? `<span class="badge badge-rate">do oceny</span>` : ''}</div>
-                <div class="v">${buyer.name} · ${p.price} zł · ${p.votes} ocen</div>
+                <div class="b">${c.brand} <span class="v">· ${c.variety}</span> ${needsRate ? `<span class="badge badge-rate">do oceny</span>` : ''}</div>
+                <div class="v">${coffeeMeta(c)}</div>
               </div>
-              <span class="score" style="font-size:22px; font-weight:600">${p.score.toFixed(1)}</span>
+              <span class="score" style="font-size:22px; font-weight:600">${c.score.toFixed(1)}</span>
             </div>
           `;
         }).join('')}
@@ -701,16 +736,23 @@ function renderModalPurchase() {
         </div>
         <div class="modal-body">
           <label class="field-label">Palarnia / marka</label>
-          <input class="field-input" id="f-brand" placeholder="np. HAYB, La Pajura..." />
+          <input class="field-input" id="f-brand" list="coffee-brands" placeholder="np. HAYB, La Pajura..." />
+          <datalist id="coffee-brands">
+            ${[...new Set(state.data.coffees.map(c => c.brand))].map(b => `<option value="${b}">`).join('')}
+          </datalist>
 
           <label class="field-label">Odmiana</label>
-          <input class="field-input" id="f-variety" placeholder="np. Etiopia Sidamo" />
+          <input class="field-input" id="f-variety" list="coffee-varieties" placeholder="np. Etiopia Sidamo" />
+          <datalist id="coffee-varieties">
+            ${[...new Set(state.data.coffees.map(c => c.variety))].map(v => `<option value="${v}">`).join('')}
+          </datalist>
 
           <label class="field-label">Cena (zł)</label>
           <input class="field-input" id="f-price" type="number" placeholder="np. 79" />
 
-          <label class="field-label">Zdjęcie opakowania *</label>
-          <input class="field-input" id="f-photo" type="file" accept="image/*" required />
+          <label class="field-label">Zdjęcie opakowania <span id="photo-required-hint">*</span></label>
+          <input class="field-input" id="f-photo" type="file" accept="image/*" />
+          <div class="mono" id="photo-hint" style="margin-top:4px; color:var(--ink-soft)"></div>
 
           ${state.saving ? '<div class="mono" style="color:var(--coffee); margin-top:8px">zapisuję...</div>' : ''}
         </div>
@@ -727,6 +769,7 @@ function renderModalPurchase() {
 
 function renderModalRating() {
   const purchase = state.data.purchases.find(p => p.id === state.modalData.purchaseId);
+  const coffee = coffeeById(purchase.coffeeId);
   const currentScore = state.modalData.score || 5;
   return `
     <div class="modal-overlay" id="modal-overlay">
@@ -736,8 +779,8 @@ function renderModalRating() {
           <button class="btn btn-ghost" id="modal-close">✕</button>
         </div>
         <div class="modal-body" style="text-align:center">
-          <div style="font-size:18px; font-weight:600; margin-bottom:4px">${purchase.brand}</div>
-          <div class="mono" style="margin-bottom:24px">${purchase.variety}</div>
+          <div style="font-size:18px; font-weight:600; margin-bottom:4px">${coffee.brand}</div>
+          <div class="mono" style="margin-bottom:24px">${coffee.variety}</div>
 
           <div class="score-picker">
             ${[1,2,3,4,5,6,7,8,9,10].map(n => `
@@ -763,71 +806,95 @@ function renderModalRating() {
 }
 
 function renderModalCoffeeCard() {
-  const purchase = state.data.purchases.find(p => p.id === state.modalData.purchaseId);
-  if (!purchase) return '';
+  const coffee = coffeeById(state.modalData.coffeeId);
+  if (!coffee) return '';
 
-  const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === purchase.drawId);
-  const buyer = draw ? memberById(draw.memberId) : null;
-  const score = avgScore(purchase.id);
-  const purchaseRatings = state.data.ratings
-    .filter(r => r.purchaseId === purchase.id)
-    .sort((a, b) => b.score - a.score);
-  const canRate = !myRatingForPurchase(purchase.id);
+  const events = purchasesForCoffee(coffee.id)
+    .map(p => {
+      const draw = state.data.rounds.flatMap(r => r.draws).find(d => d.id === p.drawId);
+      const buyer = draw ? memberById(draw.memberId) : null;
+      const ratings = state.data.ratings.filter(r => r.purchaseId === p.id).sort((a, b) => b.score - a.score);
+      return { ...p, draw, buyer, ratings, myRating: myRatingForPurchase(p.id) };
+    })
+    .sort((a, b) => new Date(b.draw?.date || 0) - new Date(a.draw?.date || 0));
+
+  const pooledRatings = events.flatMap(e => e.ratings);
+  const score = pooledRatings.length ? pooledRatings.reduce((s, r) => s + r.score, 0) / pooledRatings.length : null;
+  const anyNeedsRate = events.some(e => !e.myRating);
 
   return `
     <div class="modal-overlay" id="modal-overlay">
-      <div class="modal" style="width:min(560px, 94vw)">
+      <div class="modal" style="width:min(620px, 94vw)">
         <div class="modal-header">
-          <h3>Karta kawy ${canRate ? `<span class="badge badge-rate" style="margin-left:8px; vertical-align:middle">do oceny</span>` : ''}</h3>
+          <h3>Karta kawy ${anyNeedsRate ? `<span class="badge badge-rate" style="margin-left:8px; vertical-align:middle">do oceny</span>` : ''}</h3>
           <button class="btn btn-ghost" id="modal-close">✕</button>
         </div>
         <div class="modal-body">
           <div class="coffee-card-head">
             <div class="coffee-card-photo">
-              <img src="${purchase.photo}" alt="kawa"/>
+              <img src="${coffee.photo}" alt="kawa"/>
             </div>
             <div class="coffee-card-info">
-              <div style="font-size:18px; font-weight:600">${purchase.brand}</div>
-              <div class="mono">${purchase.variety}</div>
+              <div style="font-size:18px; font-weight:600">${coffee.brand}</div>
+              <div class="mono">${coffee.variety}</div>
               <div class="mono" style="margin-top:6px; color:var(--ink-soft)">
-                ${buyer ? `${buyVerb(buyer)} ${buyer.name}` : ''} · ${purchase.price} zł
+                kupiona ${events.length} ${events.length === 1 ? 'raz' : 'razy'}
               </div>
             </div>
             <div class="coffee-card-score">
               <div class="value">${score !== null ? score.toFixed(1) : '—'}</div>
-              <div class="mono">${purchaseRatings.length} ${purchaseRatings.length === 1 ? 'ocena' : 'ocen'}</div>
+              <div class="mono">${pooledRatings.length} ${pooledRatings.length === 1 ? 'ocena' : 'ocen'}</div>
             </div>
           </div>
 
           <hr class="divider"/>
 
-          <h3 style="margin-bottom:8px">Komentarze</h3>
-          ${purchaseRatings.length === 0
-            ? `<div class="mono" style="padding:12px 0">jeszcze nikt nie ocenił tej kawy</div>`
-            : `<div class="comment-list">
-                ${purchaseRatings.map(r => {
-                  const m = memberById(r.memberId);
-                  return `
-                    <div class="comment-row">
-                      <div class="avatar" style="width:32px; height:32px; font-size:12px">${initials(m?.name || '?')}</div>
-                      <div class="comment-body">
-                        <div class="comment-top">
-                          <span class="comment-name">${m?.name || 'nieznany'}</span>
-                          <span class="comment-score">${r.score}/10</span>
-                        </div>
-                        ${r.comment
-                          ? `<div class="comment-text">${r.comment}</div>`
-                          : `<div class="comment-text comment-empty">bez komentarza</div>`}
-                      </div>
-                    </div>
-                  `;
-                }).join('')}
-              </div>`
-          }
+          <h3 style="margin-bottom:8px">Historia zakupów</h3>
+          <div class="purchase-event-list">
+            ${events.map(e => {
+              const eventScore = avgScore(e.id);
+              return `
+              <div class="purchase-event">
+                <div class="purchase-event-head">
+                  <div class="avatar" style="width:32px; height:32px; font-size:12px">${initials(e.buyer?.name || '?')}</div>
+                  <div class="purchase-event-info">
+                    <div>${e.buyer ? `${buyVerb(e.buyer)} ${e.buyer.name}` : 'nieznany'}</div>
+                    <div class="mono">${e.draw?.date || ''} · ${e.price} zł</div>
+                  </div>
+                  <div class="purchase-event-score">
+                    <span class="mono">${eventScore !== null ? eventScore.toFixed(1) : '—'}</span>
+                    ${!e.myRating ? `<button class="btn btn-primary" data-rate-purchase="${e.id}">Oceń</button>` : ''}
+                  </div>
+                </div>
+                ${e.ratings.length === 0
+                  ? `<div class="mono" style="padding:6px 0">jeszcze nikt nie ocenił tego zakupu</div>`
+                  : `<div class="comment-list">
+                      ${e.ratings.map(r => {
+                        const m = memberById(r.memberId);
+                        return `
+                          <div class="comment-row">
+                            <div class="avatar" style="width:32px; height:32px; font-size:12px">${initials(m?.name || '?')}</div>
+                            <div class="comment-body">
+                              <div class="comment-top">
+                                <span class="comment-name">${m?.name || 'nieznany'}</span>
+                                <span class="comment-score">${r.score}/10</span>
+                              </div>
+                              ${r.comment
+                                ? `<div class="comment-text">${r.comment}</div>`
+                                : `<div class="comment-text comment-empty">bez komentarza</div>`}
+                            </div>
+                          </div>
+                        `;
+                      }).join('')}
+                    </div>`
+                }
+              </div>
+              `;
+            }).join('')}
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-ghost" id="modal-close-2">Zamknij</button>
-          ${canRate ? `<button class="btn btn-primary" id="btn-rate-from-card">Oceń kawę</button>` : ''}
         </div>
       </div>
     </div>
@@ -1018,19 +1085,37 @@ function attachEvents() {
   document.querySelectorAll('[data-card]').forEach(el => {
     el.onclick = () => {
       state.modal = 'coffeeCard';
-      state.modalData = { purchaseId: el.dataset.card };
+      state.modalData = { coffeeId: el.dataset.card };
       render();
     };
   });
 
-  // oceń kawę (przycisk w karcie kawy)
-  const btnRateFromCard = $('#btn-rate-from-card');
-  if (btnRateFromCard) btnRateFromCard.onclick = () => {
-    const purchaseId = state.modalData.purchaseId;
-    state.modal = 'rating';
-    state.modalData = { purchaseId, score: 7, comment: '' };
-    render();
+  // oceń konkretny zakup (przycisk w karcie kawy, per partia)
+  document.querySelectorAll('[data-rate-purchase]').forEach(el => {
+    el.onclick = () => {
+      const purchaseId = el.dataset.ratePurchase;
+      state.modal = 'rating';
+      state.modalData = { purchaseId, score: 7, comment: '' };
+      render();
+    };
+  });
+
+  // marka/odmiana w formularzu zakupu — przełącz wymagalność zdjęcia dla znanej kawy
+  // (bez pełnego re-render, żeby nie tracić focusu przy pisaniu)
+  const updatePhotoRequirement = () => {
+    const brand = $('#f-brand')?.value?.trim().toLowerCase();
+    const variety = $('#f-variety')?.value?.trim().toLowerCase();
+    const known = !!brand && !!variety && state.data.coffees.some(c =>
+      c.brand.trim().toLowerCase() === brand && c.variety.trim().toLowerCase() === variety);
+    const hint = $('#photo-hint');
+    if (hint) hint.textContent = known ? 'znana kawa — zdjęcie niewymagane' : '';
+    const req = $('#photo-required-hint');
+    if (req) req.style.display = known ? 'none' : 'inline';
   };
+  ['f-brand', 'f-variety'].forEach(id => {
+    const el = $(`#${id}`);
+    if (el) el.oninput = updatePhotoRequirement;
+  });
 
   // przyciski obecności (W biurze / Nieobecny)
   document.querySelectorAll('[data-presence]').forEach(el => {
@@ -1126,8 +1211,12 @@ async function savePurchase() {
     return;
   }
 
-  if (!file) {
-    alert('Dodaj zdjęcie opakowania.');
+  const existingCoffee = state.data.coffees.find(c =>
+    c.brand.trim().toLowerCase() === brand.toLowerCase() &&
+    c.variety.trim().toLowerCase() === variety.toLowerCase());
+
+  if (!existingCoffee && !file) {
+    alert('Dodaj zdjęcie opakowania (nowa kawa).');
     return;
   }
 
@@ -1135,22 +1224,34 @@ async function savePurchase() {
   render();
 
   try {
-    const ext = file.name.split('.').pop();
-    const path = `${drawId}_${uid()}.${ext}`;
-    const photoUrl = await sb.uploadPhoto(file, path);
+    let coffeeId;
+    if (existingCoffee) {
+      coffeeId = existingCoffee.id;
+    } else {
+      const ext = file.name.split('.').pop();
+      const path = `${drawId}_${uid()}.${ext}`;
+      const photoUrl = await sb.uploadPhoto(file, path);
+
+      coffeeId = 'c' + uid();
+      await sb.post('coffees', {
+        id: coffeeId,
+        brand,
+        variety,
+        photo_url: photoUrl,
+      });
+      state.data.coffees.push({ id: coffeeId, brand, variety, photo: photoUrl });
+    }
 
     const purchaseId = 'p' + uid();
     await sb.post('purchases', {
       id: purchaseId,
       draw_id: drawId,
-      brand,
-      variety,
+      coffee_id: coffeeId,
       price,
-      photo_url: photoUrl,
     });
 
     // dodaj lokalnie
-    state.data.purchases.push({ id: purchaseId, drawId, brand, variety, price, photo: photoUrl });
+    state.data.purchases.push({ id: purchaseId, drawId, coffeeId, price });
 
     state.modal = null;
     state.modalData = {};

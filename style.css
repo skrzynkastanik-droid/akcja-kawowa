@@ -837,6 +837,13 @@ table.data tr:hover { background: var(--paper-2); }
 .comment-name { font-weight: 600; font-size: 14px; }
 .comment-score { font-family: 'Inter', system-ui, sans-serif; font-weight: 600; color: var(--coffee); }
 .comment-text { font-size: 14px; color: var(--ink-2); margin-top: 2px; }
+
+.purchase-event-list { display: flex; flex-direction: column; gap: 14px; }
+.purchase-event { padding: 10px 0; border-top: 1px solid var(--line); }
+.purchase-event:first-child { border-top: none; padding-top: 0; }
+.purchase-event-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.purchase-event-info { flex: 1; text-align: left; }
+.purchase-event-score { display: flex; align-items: center; gap: 8px; }
 .comment-text.comment-empty { color: var(--ink-soft); font-style: italic; }
 
 /*presence toggle */
