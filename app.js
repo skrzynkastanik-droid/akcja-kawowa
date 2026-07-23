@@ -586,7 +586,6 @@ function renderRanking() {
   const ranked = rankedPurchases();
   const top3 = ranked.slice(0, 3);
   const rest = ranked.slice(3);
-  const medal = (i) => ['🥇','🥈','🥉'][i] || '';
 
   // zakupy bez żadnej oceny — nie trafiają jeszcze do rankingu, więc pokazujemy je osobno (wejście przez kartę kawy)
   const unrated = state.data.purchases.filter(p => avgScore(p.id) === null);
@@ -626,9 +625,7 @@ function renderRanking() {
         return `
           <div class="rank-card ${i === 0 ? 'top1' : ''} ${needsRate ? 'needs-rate' : ''}" data-card="${p.id}">
             <div class="photo">
-              ${p.photo
-                ? `<img src="${p.photo}" alt="kawa" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>`
-                : `<span style="font-size:32px">${medal(i)}</span>`}
+              <img src="${p.photo}" alt="kawa" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>
             </div>
             <div class="body">
               <div class="header">
@@ -707,8 +704,8 @@ function renderModalPurchase() {
           <label class="field-label">Cena (zł)</label>
           <input class="field-input" id="f-price" type="number" placeholder="np. 79" />
 
-          <label class="field-label">Zdjęcie opakowania</label>
-          <input class="field-input" id="f-photo" type="file" accept="image/*" />
+          <label class="field-label">Zdjęcie opakowania *</label>
+          <input class="field-input" id="f-photo" type="file" accept="image/*" required />
 
           ${state.saving ? '<div class="mono" style="color:var(--coffee); margin-top:8px">zapisuję...</div>' : ''}
         </div>
@@ -782,9 +779,7 @@ function renderModalCoffeeCard() {
         <div class="modal-body">
           <div class="coffee-card-head">
             <div class="coffee-card-photo">
-              ${purchase.photo
-                ? `<img src="${purchase.photo}" alt="kawa"/>`
-                : `<span style="font-size:28px">☕</span>`}
+              <img src="${purchase.photo}" alt="kawa"/>
             </div>
             <div class="coffee-card-info">
               <div style="font-size:18px; font-weight:600">${purchase.brand}</div>
@@ -1126,17 +1121,18 @@ async function savePurchase() {
     return;
   }
 
+  if (!file) {
+    alert('Dodaj zdjęcie opakowania.');
+    return;
+  }
+
   state.saving = true;
   render();
 
   try {
-    let photoUrl = null;
-
-    if (file) {
-      const ext = file.name.split('.').pop();
-      const path = `${drawId}_${uid()}.${ext}`;
-      photoUrl = await sb.uploadPhoto(file, path);
-    }
+    const ext = file.name.split('.').pop();
+    const path = `${drawId}_${uid()}.${ext}`;
+    const photoUrl = await sb.uploadPhoto(file, path);
 
     const purchaseId = 'p' + uid();
     await sb.post('purchases', {
